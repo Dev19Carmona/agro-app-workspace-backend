@@ -29,7 +29,7 @@ Decisión: **monolito modular + notifications separado**. Ya no son 6 servicios 
 
 ## Commands
 
-- `npm run start:dev` — run `api` (default project) with watch mode (`start`, `start:debug`, `start:prod` also exist; prod runs `node dist/apps/api/main`). Listens on `PORT` or 3000. `npm run start:notifications` runs the notifications service (port 3005).
+- `npm run start:dev` — run `api` (default project) with watch mode (`start`, `start:debug`, `start:prod` also exist; prod runs `node dist/apps/api/main`). Listens on `PORT` or 3000. `npm run start:dev:notifications` / `npm run start:prod:notifications` run the notifications service (port 3005; prod runs `node dist/apps/notifications/main`).
 - `npm run build` — `nest build` of `api` only (cleans `dist/`). `npm run build:all` builds `api` and `notifications`.
 - `npm run lint` — `oxlint --type-aware apps/ libs/` (oxlint, not ESLint; `no-floating-promises` is an error).
 - `npm run format` — Prettier (single quotes, trailing commas).
