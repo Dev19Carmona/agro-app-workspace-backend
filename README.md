@@ -25,6 +25,23 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Estructura del proyecto
+
+Monorepo de Nest CLI con arquitectura híbrida (ver `CLAUDE.md`):
+
+| App | Ruta | Puerto | Swagger |
+| --- | --- | --- | --- |
+| `api` (monolito: auth, catalog, order, payments) | `apps/api` | 3000 | `/docs` |
+| `notifications` (servicio independiente) | `apps/notifications` | 3005 | `/docs` |
+
+Código compartido en `libs/common`. Configuración del monorepo en `nest-cli.json` (proyecto por defecto: `api`).
+
+```bash
+npm run start:dev                 # api
+npm run start:dev:notifications   # notifications
+npm run build:all                 # compila api y notifications
+```
+
 ## Project setup
 
 ```bash
