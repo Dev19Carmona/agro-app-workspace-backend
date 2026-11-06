@@ -25,32 +25,8 @@
   },
   "files": [],
   "references": [
-    {
-      "path": "./apps/gateway/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/gateway/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/agro-app-workspace/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/catalog/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/auth/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/order/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/notifications/tsconfig.app.json"
-    },
-    {
-      "path": "./apps/payments/tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.spec.json"
-    }
+    { "path": "./apps/api/tsconfig.app.json" },
+    { "path": "./apps/notifications/tsconfig.app.json" },
+    { "path": "./tsconfig.spec.json" }
   ]
 }

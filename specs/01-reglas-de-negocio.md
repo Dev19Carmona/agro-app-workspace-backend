@@ -3,7 +3,7 @@
 > **Status:** Aprobado
 > **Depends on:** Ninguna
 > **Date:** 2026-11-06
-> **Objective:** Dejar consolidadas en el repositorio las reglas de negocio del marketplace agropecuario Mini-Croper (dominio, saga, seguridad y arquitectura objetivo) como contexto fijo para futuros specs y para el agente.
+> **Objective:** Dejar consolidadas en el repositorio las reglas de negocio del marketplace agropecuario Mini-Croper (dominio, saga, seguridad y arquitectura vigente) como contexto fijo para futuros specs y para el agente.
 
 ## Por qué existe este spec
 
@@ -20,14 +20,13 @@ Este spec no construye funcionalidad. Los specs de implementación posteriores (
 - Definir las reglas de dominio: roles, entidades, estados de pedido y de pago, precios, stock, expiración y tokens de prueba de pago.
 - Definir la saga de pedido con pago virtual y el catálogo de eventos.
 - Definir las reglas de seguridad y permisos.
-- Registrar la arquitectura de microservicios como **arquitectura objetivo sujeta a cambio**.
+- Registrar la arquitectura del proyecto. Inicialmente era microservicios (objetivo sujeto a cambio); el 2026-11-06 se decidió una **arquitectura híbrida** (ver "Arquitectura vigente").
 - Añadir en `CLAUDE.md` una sección que apunte a este spec y fije su precedencia.
 - Crear `specs/.spec-config.yml` con la configuración por defecto.
 
 **Fuera de alcance (para specs futuros):**
 
 - Cualquier código: servicios, entidades TypeORM, controladores, migraciones, docker-compose.
-- Decidir de forma definitiva monolito modular vs. microservicios.
 - Pagos reales, crédito, logística, búsqueda avanzada, cotizaciones (ver "Mejoras futuras").
 - Cambiar el stack del repo (NestJS 12, Vitest, oxlint, ESM).
 - Colección Postman, datos semilla y README de entrega.
@@ -149,36 +148,33 @@ El `correlationId` es el id del pedido.
 
 ### Seguridad y permisos
 
-- Solo el API Gateway es público; valida el JWT y cada servicio vuelve a validar rol y propiedad (defensa en profundidad).
+- Solo el monolito `api` es público; valida el JWT en un guard global y cada módulo vuelve a validar rol y propiedad (defensa en profundidad). `notifications` no se expone al público.
 - Access token JWT de **15 min** (RS256) y refresh token de **7 días**, guardado con hash y revocable.
 - Contraseñas con `bcrypt` (costo 10 o más); bloqueo temporal tras **5 intentos fallidos** de login.
-- Los servicios validan el JWT con la clave pública, sin llamar a `auth`.
+- Los módulos validan el JWT con la clave pública, sin llamar a `auth`; `notifications` solo acepta eventos del monolito.
 - RBAC con `@Roles(...)` y `RolesGuard`, más reglas de propiedad: PROVEEDOR solo su tienda, PRODUCTOR solo sus pedidos, solo ADMIN todos los pagos.
 - Rate limiting: 100 req/min por IP, 5/min en `/auth/login`, 10/min en `/payments`.
-- Endpoints `/internal/*` protegidos con token de servicio y bloqueados en el gateway.
+- Endpoints `/internal/*` (p. ej. del servicio `notifications`) protegidos con token de servicio y no expuestos por `api`.
 - Validación estricta de entrada que rechace propiedades desconocidas (evita *mass assignment*).
 - El sistema nunca recibe ni guarda datos de tarjeta (fuera de alcance PCI DSS).
 - Habeas Data (Ley 1581 de 2012): consentimiento explícito al registrarse y mínimo de datos.
 - Los logs no incluyen contraseñas, tokens ni documentos completos.
 
-## Arquitectura objetivo (sujeta a cambio)
+## Arquitectura vigente (híbrida)
 
-Esta sección describe el destino planteado en el documento fuente. **No es una decisión cerrada**: las reglas de arriba están escritas por dominio y no dependen de ella.
+Decisión del 2026-11-06: **monolito modular** para el núcleo (auth, catalog, order y payments) y **un solo servicio aparte** (notifications). Reemplaza al diseño original de gateway + 5 servicios + RabbitMQ, que se conserva solo como historia en `references/LogicaNegocio.md`. Las reglas de arriba están escritas por dominio y no dependen de esta sección.
 
-| Servicio | Puerto | Base de datos | Responsabilidad |
+| App | Puerto | Base de datos | Responsabilidad |
 | --- | --- | --- | --- |
-| api-gateway | 3000 | — | Entrada única, valida JWT, rate limiting, enruta |
-| auth-service | 3001 | `auth_db` | Registro, login, JWT, roles |
-| catalog-service | 3002 | `catalog_db` | Tiendas, categorías, productos, variantes, stock, ofertas |
-| order-service | 3003 | `order_db` | Carrito, checkout, pedidos, sub-pedidos |
-| payment-service | 3004 | `payment_db` | Pasarela simulada y registro de pagos |
-| notification-service | 3005 | — | Consume eventos y envía avisos simulados |
+| api (monolito) | 3000 | una sola BD, con tablas propias por módulo | Módulos `auth` (registro, login, JWT, roles), `catalog` (tiendas, productos, variantes, stock, ofertas), `order` (carrito, checkout, pedidos, sub-pedidos) y `payments` (pasarela simulada y registro de pagos) |
+| notifications | 3005 | — | Consume eventos y envía avisos simulados |
 
-- Cada servicio es dueño de sus datos (*database per service*); se comunican por HTTP o eventos.
-- Broker: RabbitMQ con exchange *topic* `agro.events` y una cola por consumidor.
-- Lecturas síncronas: `order` pide precios a `catalog`; `payment` pide monto y estado a `order`.
-- Prefijo de API: `/api/v1`.
-- Entregables mencionados: Swagger por servicio, `GET /health`, logs JSON con `correlationId`.
+- Un único proceso expone la API pública con prefijo `/api/v1`; no hay API Gateway. Rutas por módulo: `/auth`, `/catalog`, `/orders`, `/payments`.
+- Dentro del monolito cada módulo es dueño de sus tablas y expone un servicio público; ningún módulo lee las tablas de otro. Las lecturas síncronas (`order` pide precios a `catalog`; `payments` pide monto y estado a `order`) son llamadas a servicios inyectados, no HTTP.
+- Los eventos del catálogo entre módulos del monolito viajan en memoria (`@nestjs/event-emitter`), con patrón outbox si se necesita garantía de entrega.
+- Los eventos que consume `notifications` (`order.confirmed`, `order.cancelled`, `payment.approved`, `payment.declined`, etc.) salen del monolito hacia ese servicio. El transporte (RabbitMQ, Redis u otro) **no está decidido** y se resolverá en el spec de notificaciones.
+- Entregables: Swagger por app, `GET /health`, logs JSON con `correlationId`.
+- Si un módulo del monolito necesita escalar o desplegarse por separado, se extrae a un servicio nuevo; por eso las fronteras entre módulos se respetan desde el inicio.
 
 ## Plan de implementación
 
@@ -195,7 +191,7 @@ Esta sección describe el destino planteado en el documento fuente. **No es una 
 - [ ] `CLAUDE.md` indica que el stack del repo prevalece sobre el del markdown fuente.
 - [ ] El spec documenta los 3 roles, los 4 estados de pedido, los 5 estados de pago y los 4 tokens de prueba.
 - [ ] El spec documenta los 5 pasos de la saga y los 8 tipos de evento del catálogo.
-- [ ] El spec marca la arquitectura de microservicios como "sujeta a cambio".
+- [x] El spec documenta la arquitectura híbrida vigente (monolito `api` + servicio `notifications`).
 - [ ] `references/LogicaNegocio.md` no fue modificado.
 - [ ] No se modificó ningún archivo bajo `src/` ni `test/`.
 - [ ] `npm run build` y `npm run lint` terminan sin errores.
@@ -206,8 +202,8 @@ Esta sección describe el destino planteado en el documento fuente. **No es una 
 - **No:** carpeta `docs/` por dominio. Es más granular, pero el documento fuente aún va a cambiar y duplicaría el mantenimiento.
 - **Sí:** las convenciones del repo prevalecen sobre el stack del markdown (Vitest, NestJS 12, oxlint, ESM). Las reglas de negocio no dependen del stack.
 - **No:** adoptar Jest, NestJS 10 ni `class-validator` como obligatorios. Quedan descartados por el punto anterior.
-- **Sí:** arquitectura de microservicios como objetivo y no como decisión cerrada. El repo hoy es una sola app Nest y el autor indicó que el documento puede cambiar.
-- **No:** monolito modular como decisión ahora. Se decidirá en un spec propio cuando se implemente el primer dominio.
+- **Sí (2026-11-06):** arquitectura híbrida. Monolito modular para auth, catalog, order y payments, y `notifications` como único servicio separado. Evita el sobrecosto de 6 procesos y de coordinar sagas distribuidas con un equipo pequeño, y deja aparte lo que es naturalmente asíncrono.
+- **No:** gateway + 5 microservicios + RabbitMQ como arquitectura. Sustituido por la decisión anterior; sigue descrito en `references/LogicaNegocio.md` solo como origen.
 - **Sí:** reglas escritas por dominio y no por servicio. Así sobreviven a un cambio de arquitectura.
 - **Sí:** conservar `references/LogicaNegocio.md` intacto como fuente histórica.
 - **Sí:** el código de ejemplo del documento fuente (`main.ts`, simulador) no se copia; solo se conserva su comportamiento como regla.
@@ -217,13 +213,14 @@ Esta sección describe el destino planteado en el documento fuente. **No es una 
 | Riesgo | Mitigación |
 | --- | --- |
 | El documento fuente cambia y el spec queda desactualizado | El spec manda en negocio; cualquier cambio se hace editando el spec o con un spec nuevo que lo marque `Obsoleto`. |
-| Un spec futuro asume microservicios por leer la sección de arquitectura | La sección está rotulada "sujeta a cambio" y las reglas no dependen de ella. |
+| Un spec futuro asume 6 servicios por leer `references/LogicaNegocio.md` | `CLAUDE.md` y este spec indican que la arquitectura vigente es híbrida y que ese documento solo es origen. |
+| Los módulos del monolito se acoplan y no se pueden extraer | Cada módulo expone solo su servicio público; no se importan archivos internos de otro módulo. |
 | Contradicciones entre el documento fuente y `CLAUDE.md` (stack) | La precedencia queda escrita en `CLAUDE.md`. |
 
 ## Qué **no** está en este spec
 
 - Código de ningún servicio, entidad, endpoint o migración.
-- La decisión definitiva de arquitectura (microservicios vs. monolito modular).
+- El transporte de eventos hacia `notifications` y el patrón outbox (specs propios).
 - Pasarela real, `credit-service`, `search-service`, `quote-service`, `logistics-service`, Kubernetes y CI/CD.
 - Docker, docker-compose, Swagger, Postman y datos semilla.
 - Cambios de stack o de herramientas del repo.
