@@ -6,6 +6,8 @@ export interface SwaggerOptions {
   description: string;
   /** Ruta donde se sirve la UI de Swagger. Por defecto `docs`. */
   path?: string;
+  /** Tags con descripción (uno por módulo) para agrupar la UI. */
+  tags?: { name: string; description: string }[];
 }
 
 /**
@@ -14,14 +16,17 @@ export interface SwaggerOptions {
  */
 export function setupSwagger(
   app: INestApplication,
-  { title, description, path = 'docs' }: SwaggerOptions,
+  { title, description, path = 'docs', tags = [] }: SwaggerOptions,
 ): void {
-  const config = new DocumentBuilder()
+  const builder = new DocumentBuilder()
     .setTitle(title)
     .setDescription(description)
     .setVersion('1.0')
-    .addBearerAuth()
-    .build();
+    .addBearerAuth();
+  for (const tag of tags) {
+    builder.addTag(tag.name, tag.description);
+  }
+  const config = builder.build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup(path, app, document, {
