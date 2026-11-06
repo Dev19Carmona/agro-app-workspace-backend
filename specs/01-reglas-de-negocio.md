@@ -3,6 +3,7 @@
 > **Status:** Aprobado
 > **Depends on:** Ninguna
 > **Date:** 2026-11-06
+> **Nota (2026-11-06):** este spec es la foto inicial y ya no se mantiene. Las reglas vigentes viven en `docs/reglas-de-negocio.md`, que se edita directamente.
 > **Objective:** Dejar consolidadas en el repositorio las reglas de negocio del marketplace agropecuario Mini-Croper (dominio, saga, seguridad y arquitectura vigente) como contexto fijo para futuros specs y para el agente.
 
 ## Por qué existe este spec

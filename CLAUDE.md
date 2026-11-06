@@ -6,10 +6,12 @@ App NestJS 12 (`agro-app-workspace`) como monorepo de Nest CLI con **arquitectur
 
 ## Reglas de negocio
 
-Las reglas de negocio de Mini-Croper (marketplace agropecuario multi-vendedor con pago virtual simulado) están en `specs/01-reglas-de-negocio.md`. Léelo antes de implementar cualquier dominio (auth, catálogo, pedidos, pagos, notificaciones).
+Las reglas de negocio de Mini-Croper (marketplace agropecuario multi-vendedor con pago virtual simulado) están en `docs/reglas-de-negocio.md`. Léelo antes de implementar cualquier dominio (auth, catálogo, pedidos, pagos, notificaciones).
 
+- `docs/reglas-de-negocio.md` es un **documento vivo**: si una regla cambia, actualízalo en el mismo cambio que toca el código y anota el cambio en su "Historial de cambios".
+- `specs/01-reglas-de-negocio.md` es la foto inicial de esas reglas; ya no se mantiene.
 - `references/LogicaNegocio.md` es la fuente de origen y **no es definitivo**; se conserva sin modificar.
-- Ante conflicto de **reglas de negocio**, manda `specs/01-reglas-de-negocio.md`.
+- Ante conflicto de **reglas de negocio**, manda `docs/reglas-de-negocio.md`.
 - Ante conflicto de **stack** (NestJS, Jest/Vitest, `class-validator`, etc.), mandan las convenciones de este archivo, no las del markdown fuente.
 - La arquitectura vigente es **híbrida** (ver "Arquitectura"). El diseño original de `references/LogicaNegocio.md` y de `specs/01-reglas-de-negocio.md` (gateway + 5 servicios + RabbitMQ) **ya no aplica**; las reglas de negocio sí.
 
