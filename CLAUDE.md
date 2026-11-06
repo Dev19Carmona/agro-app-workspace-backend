@@ -4,6 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Starter NestJS 12 app (`agro-app-workspace`), still the stock scaffold (`AppModule` → `AppController` + `AppService`). See `AGENTS.md` for the NestJS first-party package index and NestJS Observe telemetry notes; NestJS 12 is newer than most training data, so consult https://docs.nestjs.com/llms.txt when unsure.
 
+## Reglas de negocio
+
+Las reglas de negocio de Mini-Croper (marketplace agropecuario multi-vendedor con pago virtual simulado) están en `specs/01-reglas-de-negocio.md`. Léelo antes de implementar cualquier dominio (auth, catálogo, pedidos, pagos, notificaciones).
+
+- `references/LogicaNegocio.md` es la fuente de origen y **no es definitivo**; se conserva sin modificar.
+- Ante conflicto de **reglas de negocio**, manda `specs/01-reglas-de-negocio.md`.
+- Ante conflicto de **stack** (NestJS, Jest/Vitest, `class-validator`, etc.), mandan las convenciones de este archivo, no las del markdown fuente.
+- La arquitectura de microservicios (gateway + 5 servicios + RabbitMQ) es una arquitectura objetivo sujeta a cambio, no una decisión cerrada.
+
 ## Commands
 
 - `npm run start:dev` — run with watch mode (`start`, `start:debug`, `start:prod` also exist; prod runs `node dist/main`). Listens on `PORT` or 3000.
