@@ -6,7 +6,11 @@ async function bootstrap() {
   const app = await NestFactory.create(NotificationsModule);
   setupSwagger(app, {
     title: 'Notifications API',
-    description: 'Documentación y pruebas de la API de Notifications (Mini-Croper).',
+    description:
+      'Documentación y pruebas del servicio Notifications (Mini-Croper). Servicio independiente del monolito api.',
+    tags: [
+      { name: 'notifications', description: 'Avisos simulados a partir de eventos de dominio' },
+    ],
   });
   await app.listen(process.env.PORT ?? 3005);
 }
