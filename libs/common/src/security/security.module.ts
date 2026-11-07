@@ -1,6 +1,6 @@
-import { Module } from '@nestjs/common';
+import { Module, StandardSchemaValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import type { ApiEnv } from '../config/env.schema.js';
@@ -36,6 +36,8 @@ import {
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Valida con el schema de `@Body({ schema })`, `@Param`, etc.
+    { provide: APP_PIPE, useClass: StandardSchemaValidationPipe },
   ],
 })
 export class SecurityModule {}

@@ -2,7 +2,7 @@
 
 > **Documento vivo.** Es la fuente de verdad de las reglas de negocio del marketplace agropecuario Mini-Croper (multi-vendedor, con pago virtual simulado). Se edita directamente cuando una regla cambia; no hace falta un spec nuevo.
 >
-> **Última actualización:** 2026-11-06
+> **Última actualización:** 2026-11-07
 
 ## Cómo mantener este archivo
 
@@ -17,16 +17,16 @@
 | Rol | Permisos de negocio |
 | --- | --- |
 | `PRODUCTOR` | Busca productos, arma carrito, hace checkout y paga. Solo ve y paga sus propios pedidos. |
-| `PROVEEDOR` | Administra su tienda, productos, variantes y stock. Ve los sub-pedidos pagados de su tienda. Solo edita recursos con su `storeId`. |
-| `ADMIN` | Gestiona usuarios, categorías y tiendas. Es el único que consulta todos los pagos. |
+| `PROVEEDOR` | Administra su tienda, productos, variantes y stock. Ve los sub-pedidos pagados de su tienda. Solo edita recursos con su `storeId`. No se registra solo: envía una solicitud que un `ADMIN` aprueba o rechaza (ver "Cuentas y acceso"). |
+| `ADMIN` | Gestiona usuarios (aprueba o rechaza solicitudes de `PROVEEDOR`, deshabilita y habilita cuentas, cambia roles), categorías y tiendas. Es el único que consulta todos los pagos. |
 
 ## Vocabulario de dominio
 
 Los nombres se conservan tal cual deben usarse en el código.
 
 ```text
-Auth          User(id, email, passwordHash, nombre, documento, rol, storeId?)
-              RefreshToken
+Auth          User(id, email, passwordHash, nombre, documento, rol, status, storeId?, consent)
+              RefreshToken(id, userId, familyId, tokenHash, expiresAt)
 Catálogo      Store(id, nombre, nit, ownerId, municipio)
               Category
               Product(id, storeId, categoryId, nombre, marca, fichaTécnica, requiresQuote)
@@ -43,6 +43,8 @@ Notificación  Sin entidades; solo registra o envía avisos.
 ## Estados
 
 ```text
+Usuario: PENDING_APPROVAL → ACTIVE | REJECTED   (solo PROVEEDOR, al registrarse)
+         ACTIVE ⇄ DISABLED                       (solo ADMIN)
 Pedido: PENDING → AWAITING_PAYMENT → CONFIRMED | CANCELLED
 Pago:   PENDING → PROCESSING → APPROVED | DECLINED | ERROR
 Método de pago: CARD | PSE | NEQUI
@@ -113,6 +115,7 @@ Formato común (el `correlationId` es el id del pedido):
 | Evento | Publica | Consume |
 | --- | --- | --- |
 | `user.registered` | auth | notification |
+| `provider.approved` / `provider.rejected` | auth | notification |
 | `order.created` | order | catalog |
 | `stock.reserved` / `stock.rejected` | catalog | order |
 | `stock.released` | catalog | order |
@@ -126,14 +129,28 @@ Formato común (el `correlationId` es el id del pedido):
 - **Reintentos y DLQ:** *ack* manual; tras 3 fallos el mensaje va a una *dead-letter queue*.
 - **Trazabilidad:** el `correlationId` viaja en headers HTTP y en cada evento.
 
+## Cuentas y acceso
+
+- El registro es público y el solicitante elige `PRODUCTOR` o `PROVEEDOR`; **nunca `ADMIN`**. Exige aceptar el tratamiento de datos y se guarda el consentimiento con su fecha.
+- Un `PRODUCTOR` queda `ACTIVE` al registrarse.
+- **Un `PROVEEDOR` no se registra solo.** Queda `PENDING_APPROVAL` y no puede iniciar sesión hasta que un `ADMIN` apruebe su solicitud (`ACTIVE`) o la rechace (`REJECTED`, con motivo opcional). Solo se aprueba o rechaza a un `PROVEEDOR` pendiente.
+- Un `REJECTED` no puede volver a registrarse con ese email; un `ADMIN` puede revertirlo a mano.
+- Un `ADMIN` puede deshabilitar una cuenta activa (`DISABLED`) y volver a habilitarla. Una cuenta deshabilitada no inicia sesión.
+- El registro público no crea `ADMIN`: el primero sale del script `seed:admin` y los siguientes los promueve un `ADMIN`. Un `ADMIN` no puede deshabilitarse ni cambiarse el rol a sí mismo, para no quedar fuera del sistema.
+- Cambiar el rol solo aplica a cuentas `ACTIVE` o `DISABLED`; las pendientes y rechazadas siguen el flujo de aprobación.
+- Deshabilitar una cuenta o cambiarle el rol cierra todas sus sesiones. El access token ya emitido sigue valiendo hasta 15 min (ventana aceptada).
+- Cambiar la contraseña exige la actual y cierra todas las sesiones del usuario.
+- El email es único y no distingue mayúsculas.
+
 ## Seguridad y permisos
 
 - Solo el monolito `api` es público; valida el JWT en un guard global y cada módulo vuelve a validar rol y propiedad (defensa en profundidad). `notifications` no se expone al público.
-- Access token JWT de **15 min** (RS256) y refresh token de **7 días**, guardado con hash y revocable.
-- Contraseñas con `bcrypt` (costo 10 o más); bloqueo temporal tras **5 intentos fallidos** de login.
+- Access token JWT de **15 min** (RS256), sin email ni documento en sus datos. Refresh token opaco de **7 días**, guardado con hash, revocable y **rotado en cada uso**: reutilizar uno ya usado se toma como robo y revoca toda la sesión.
+- Contraseñas con `bcrypt` (costo **12**). Política: mínimo 10 caracteres y máximo 72 bytes, con mayúscula, minúscula y número, y sin contener el email.
+- Tras **5 intentos fallidos** de login la cuenta se bloquea **15 minutos**; al vencer, el contador vuelve a 0. Email inexistente, contraseña incorrecta y cuenta bloqueada responden igual (`401`), para no revelar qué cuentas existen. El estado de la cuenta (`403`: pendiente, rechazada o deshabilitada) solo se revela con la contraseña correcta.
 - Los módulos validan el JWT con la clave pública, sin llamar a `auth`; `notifications` solo acepta eventos del monolito.
 - RBAC con `@Roles(...)` y `RolesGuard`, más reglas de propiedad: PROVEEDOR solo su tienda, PRODUCTOR solo sus pedidos, solo ADMIN todos los pagos.
-- Rate limiting: 100 req/min por IP, 5/min en `/auth/login`, 10/min en `/payments`.
+- Rate limiting por IP: 100 req/min en general; 5/min en `/auth/login`, `/auth/register` y `/auth/change-password`; 10/min en `/auth/refresh` y en `/payments`.
 - Endpoints `/internal/*` (p. ej. del servicio `notifications`) protegidos con token de servicio y no expuestos por `api`.
 - Validación estricta de entrada que rechace propiedades desconocidas (evita *mass assignment*).
 - El sistema nunca recibe ni guarda datos de tarjeta (fuera de alcance PCI DSS).
@@ -150,3 +167,4 @@ Pagos reales, crédito, logística, búsqueda avanzada y cotizaciones. Si se abo
 | --- | --- | --- |
 | 2026-11-06 | Creación del archivo a partir de `specs/01-reglas-de-negocio.md` (solo reglas; sin plan, criterios ni arquitectura). | Las reglas van a cambiar durante el desarrollo y necesitan un documento vivo en lugar de un spec cerrado. |
 | 2026-11-06 | Nueva sección "Persistencia" (MongoDB, colecciones propias por módulo, transacciones). En la saga, la reserva de stock deja de describirse como un bloqueo de filas de base relacional y pasa a ser una actualización atómica condicional. El outbox se guarda en la colección `outbox_events`. | Se eligió MongoDB como base de datos (SPEC 02); las reglas asumían una base relacional. |
+| 2026-11-07 | Regla nueva: un `PROVEEDOR` no se registra solo, queda `PENDING_APPROVAL` y un `ADMIN` aprueba o rechaza su solicitud. Nuevos estados del usuario (`ACTIVE`, `PENDING_APPROVAL`, `REJECTED`, `DISABLED`) y sección "Cuentas y acceso". Se concretan: política de contraseña, `bcrypt` con costo 12, bloqueo de 15 min tras 5 fallos, rotación del refresh token con revocación de la sesión ante reuso y límites de peticiones por endpoint de `auth`. Nuevos eventos `provider.approved` y `provider.rejected`. | Implementación del módulo `auth` (SPEC 03). La aprobación de proveedores no estaba en las reglas originales y el resto afinaba reglas que solo daban un mínimo. |

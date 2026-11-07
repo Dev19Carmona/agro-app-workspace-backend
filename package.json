@@ -23,7 +23,8 @@
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
-    "keys:generate": "node scripts/generate-jwt-keys.mjs"
+    "keys:generate": "node scripts/generate-jwt-keys.mjs",
+    "seed:admin": "node --env-file-if-exists=.env scripts/seed-admin.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

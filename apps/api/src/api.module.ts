@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MongooseModule } from '@nestjs/mongoose';
 import type { ApiEnv } from '../../../libs/common/src/config/env.schema.js';
 import { validateApiEnv } from '../../../libs/common/src/config/env.schema.js';
@@ -25,6 +26,7 @@ import { PaymentsModule } from './modules/payments/payments.module.js';
         dbName: 'mini-croper',
       }),
     }),
+    EventEmitterModule.forRoot(),
     SecurityModule,
     HealthModule,
     AuthModule,
