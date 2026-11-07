@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import bcrypt from 'bcrypt';
-import { BCRYPT_COST, checkPasswordPolicy } from './password.policy.js';
+import {
+  BCRYPT_COST,
+  checkPasswordPolicy,
+} from '../policies/password.policy.js';
 
 /**
  * Hash bcrypt válido (costo 12) de una contraseña que nadie conoce. Se compara

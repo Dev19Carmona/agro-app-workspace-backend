@@ -5,15 +5,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { Role } from '../../../../../libs/common/src/security/roles.js';
-import { AuthEvents } from './auth.events.js';
+import { Role } from '../../../../../../libs/common/src/security/roles.js';
+import { AuthEvents } from '../events/auth.events.js';
 import {
   AuthService,
   CONSENT_VERSION,
   LOCK_DURATION_MS,
-} from './auth.service.js';
-import type { RegisterDto } from './dto/register.dto.js';
-import { UserStatus } from './schemas/user.schema.js';
+} from '../services/auth.service.js';
+import type { RegisterDto } from '../dto/register.dto.js';
+import { UserStatus } from '../schemas/user.schema.js';
 
 const registro: RegisterDto = {
   email: 'ana@correo.com',

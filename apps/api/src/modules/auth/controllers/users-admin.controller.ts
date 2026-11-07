@@ -13,11 +13,11 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   CurrentUser,
   Roles,
-} from '../../../../../libs/common/src/security/decorators.js';
+} from '../../../../../../libs/common/src/security/decorators.js';
 import {
   type AuthenticatedUser,
   Role,
-} from '../../../../../libs/common/src/security/roles.js';
+} from '../../../../../../libs/common/src/security/roles.js';
 import {
   type ChangeRoleDto,
   changeRoleSchema,
@@ -26,12 +26,12 @@ import {
   objectIdSchema,
   type RejectDto,
   rejectSchema,
-} from './dto/users-admin.dto.js';
+} from '../dto/users-admin.dto.js';
 import {
   type AdminUserView,
   type UserPage,
   UsersService,
-} from './users.service.js';
+} from '../services/users.service.js';
 
 /** Gestión de usuarios: solo ADMIN. */
 @ApiTags('auth')

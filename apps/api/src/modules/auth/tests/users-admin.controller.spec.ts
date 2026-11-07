@@ -7,9 +7,9 @@ import {
 import { APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { RolesGuard } from '../../../../../libs/common/src/security/roles.guard.js';
-import { UsersAdminController } from './users-admin.controller.js';
-import { UsersService } from './users.service.js';
+import { RolesGuard } from '../../../../../../libs/common/src/security/roles.guard.js';
+import { UsersAdminController } from '../controllers/users-admin.controller.js';
+import { UsersService } from '../services/users.service.js';
 
 const ID = '6aee7a351616d80ba08c95b4';
 const ADMIN_ID = '6aee7a351616d80ba08c95aa';

@@ -7,13 +7,13 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { type Model, type Types } from 'mongoose';
-import { Role } from '../../../../../libs/common/src/security/roles.js';
-import { AuthEvents, type UserRegisteredEvent } from './auth.events.js';
-import type { LoginDto } from './dto/login.dto.js';
-import type { RegisterDto } from './dto/register.dto.js';
-import type { ChangePasswordDto, RefreshDto } from './dto/session.dto.js';
+import { Role } from '../../../../../../libs/common/src/security/roles.js';
+import { AuthEvents, type UserRegisteredEvent } from '../events/auth.events.js';
+import type { LoginDto } from '../dto/login.dto.js';
+import type { RegisterDto } from '../dto/register.dto.js';
+import type { ChangePasswordDto, RefreshDto } from '../dto/session.dto.js';
 import { PasswordService } from './password.service.js';
-import { User, type UserDocument, UserStatus } from './schemas/user.schema.js';
+import { User, type UserDocument, UserStatus } from '../schemas/user.schema.js';
 import { ACCESS_TOKEN_TTL_SECONDS, TokenService } from './token.service.js';
 
 /** Versión del texto de tratamiento de datos (Habeas Data) que acepta el usuario. */

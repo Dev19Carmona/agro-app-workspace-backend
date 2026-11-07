@@ -4,10 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { Role } from '../../../../../libs/common/src/security/roles.js';
-import { AuthEvents } from './auth.events.js';
-import { UserStatus } from './schemas/user.schema.js';
-import { UsersService } from './users.service.js';
+import { Role } from '../../../../../../libs/common/src/security/roles.js';
+import { AuthEvents } from '../events/auth.events.js';
+import { UserStatus } from '../schemas/user.schema.js';
+import { UsersService } from '../services/users.service.js';
 
 function usuario(extra: Record<string, unknown> = {}) {
   return {

@@ -7,14 +7,14 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectModel } from '@nestjs/mongoose';
 import { type QueryFilter, type Model, Types } from 'mongoose';
-import { Role } from '../../../../../libs/common/src/security/roles.js';
+import { Role } from '../../../../../../libs/common/src/security/roles.js';
 import {
   AuthEvents,
   type ProviderApprovedEvent,
   type ProviderRejectedEvent,
-} from './auth.events.js';
-import type { ListUsersQuery } from './dto/users-admin.dto.js';
-import { User, type UserDocument, UserStatus } from './schemas/user.schema.js';
+} from '../events/auth.events.js';
+import type { ListUsersQuery } from '../dto/users-admin.dto.js';
+import { User, type UserDocument, UserStatus } from '../schemas/user.schema.js';
 import { TokenService } from './token.service.js';
 
 type StoredUser = User & { _id: Types.ObjectId };

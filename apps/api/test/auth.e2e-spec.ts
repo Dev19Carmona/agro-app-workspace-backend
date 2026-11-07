@@ -134,7 +134,7 @@ describe('auth y seguridad transversal (e2e)', () => {
     const { applySecurity } =
       await import('../../../libs/common/src/security/apply-security.js');
     const { PasswordService } =
-      await import('../src/modules/auth/password.service.js');
+      await import('../src/modules/auth/services/password.service.js');
 
     // El módulo de pruebas no registra nada por defecto: con un logger real se
     // capturan también los logs de arranque.

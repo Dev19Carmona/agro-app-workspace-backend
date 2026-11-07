@@ -8,8 +8,8 @@ import { APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import request from 'supertest';
-import { AuthController } from './auth.controller.js';
-import { AuthService } from './auth.service.js';
+import { AuthController } from '../controllers/auth.controller.js';
+import { AuthService } from '../services/auth.service.js';
 
 const USUARIO = { id: 'u1', rol: 'PRODUCTOR', sessionId: 'fam-1' };
 

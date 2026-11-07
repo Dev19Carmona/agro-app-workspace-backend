@@ -12,22 +12,22 @@ import { z } from 'zod';
 import {
   CurrentUser,
   Public,
-} from '../../../../../libs/common/src/security/decorators.js';
-import type { AuthenticatedUser } from '../../../../../libs/common/src/security/roles.js';
+} from '../../../../../../libs/common/src/security/decorators.js';
+import type { AuthenticatedUser } from '../../../../../../libs/common/src/security/roles.js';
 import {
   AuthService,
   type LoginResult,
   type Profile,
   type PublicUser,
-} from './auth.service.js';
-import { type LoginDto, loginSchema } from './dto/login.dto.js';
-import { type RegisterDto, registerSchema } from './dto/register.dto.js';
+} from '../services/auth.service.js';
+import { type LoginDto, loginSchema } from '../dto/login.dto.js';
+import { type RegisterDto, registerSchema } from '../dto/register.dto.js';
 import {
   type ChangePasswordDto,
   changePasswordSchema,
   type RefreshDto,
   refreshSchema,
-} from './dto/session.dto.js';
+} from '../dto/session.dto.js';
 
 /** 5 peticiones por minuto por IP en los endpoints de credenciales. */
 const CREDENTIALS_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
