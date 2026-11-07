@@ -13,11 +13,14 @@ export interface SwaggerOptions {
 /**
  * Configura Swagger (OpenAPI) para una app Nest.
  * UI en `/<path>` y JSON en `/<path>-json`.
+ * No se publica con `NODE_ENV=production`: expone toda la superficie de la API.
  */
 export function setupSwagger(
   app: INestApplication,
   { title, description, path = 'docs', tags = [] }: SwaggerOptions,
 ): void {
+  if (process.env.NODE_ENV === 'production') return;
+
   const builder = new DocumentBuilder()
     .setTitle(title)
     .setDescription(description)
