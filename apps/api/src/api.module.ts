@@ -6,10 +6,10 @@ import type { ApiEnv } from '../../../libs/common/src/config/env.schema.js';
 import { validateApiEnv } from '../../../libs/common/src/config/env.schema.js';
 import { HealthModule } from '../../../libs/common/src/health/health.module.js';
 import { SecurityModule } from '../../../libs/common/src/security/security.module.js';
-import { AuthModule } from './modules/auth/auth.module.js';
-import { CatalogModule } from './modules/catalog/catalog.module.js';
-import { OrderModule } from './modules/order/order.module.js';
-import { PaymentsModule } from './modules/payments/payments.module.js';
+import { AuthModule } from './modules/auth/index.js';
+import { CatalogModule } from './modules/catalog/index.js';
+import { OrderModule } from './modules/order/index.js';
+import { PaymentsModule } from './modules/payments/index.js';
 
 /**
  * Monolito modular: núcleo de Mini-Croper (auth, catálogo, pedidos y pagos).

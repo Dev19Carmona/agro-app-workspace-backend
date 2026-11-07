@@ -5,8 +5,8 @@ import {
   SeedError,
   seedAdmin,
   type UsersCollection,
-} from '../../../../../scripts/seed-admin.ts';
-import { UserSchema } from './schemas/user.schema.js';
+} from '../../../../../../scripts/seed-admin.ts';
+import { UserSchema } from '../schemas/user.schema.js';
 
 const VALIDO = {
   ADMIN_EMAIL: 'Admin@Correo.com',

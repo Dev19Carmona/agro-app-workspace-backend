@@ -1,7 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import bcrypt from 'bcrypt';
-import { checkPasswordPolicy, PASSWORD_MAX_BYTES } from './password.policy.js';
-import { PasswordService } from './password.service.js';
+import {
+  checkPasswordPolicy,
+  PASSWORD_MAX_BYTES,
+} from '../policies/password.policy.js';
+import { PasswordService } from '../services/password.service.js';
 
 const VALIDA = 'Segura12345';
 

@@ -1,7 +1,7 @@
 import { model, Types } from 'mongoose';
 import { Role } from '../../../../../../libs/common/src/security/roles.js';
-import { RefreshTokenSchema } from './refresh-token.schema.js';
-import { UserSchema, UserStatus } from './user.schema.js';
+import { RefreshTokenSchema } from '../schemas/refresh-token.schema.js';
+import { UserSchema, UserStatus } from '../schemas/user.schema.js';
 
 type Indice = [Record<string, number>, Record<string, unknown>];
 const indices = (schema: { indexes(): unknown[] }) =>

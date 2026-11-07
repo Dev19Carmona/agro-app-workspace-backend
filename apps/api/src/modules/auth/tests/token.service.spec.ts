@@ -2,16 +2,16 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
-import { Role } from '../../../../../libs/common/src/security/roles.js';
+import { Role } from '../../../../../../libs/common/src/security/roles.js';
 import {
   JWT_AUDIENCE,
   JWT_ISSUER,
-} from '../../../../../libs/common/src/security/security.constants.js';
+} from '../../../../../../libs/common/src/security/security.constants.js';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   REFRESH_TOKEN_TTL_MS,
   TokenService,
-} from './token.service.js';
+} from '../services/token.service.js';
 
 type Doc = {
   _id: Types.ObjectId;

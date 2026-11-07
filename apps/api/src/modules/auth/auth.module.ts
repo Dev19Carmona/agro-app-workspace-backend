@@ -3,17 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 import type { ApiEnv } from '../../../../../libs/common/src/config/env.schema.js';
-import { AuthController } from './auth.controller.js';
-import { AuthService } from './auth.service.js';
-import { PasswordService } from './password.service.js';
+import { AuthController } from './controllers/auth.controller.js';
+import { AuthService } from './services/auth.service.js';
+import { PasswordService } from './services/password.service.js';
 import {
   RefreshToken,
   RefreshTokenSchema,
 } from './schemas/refresh-token.schema.js';
 import { User, UserSchema } from './schemas/user.schema.js';
-import { TokenService } from './token.service.js';
-import { UsersAdminController } from './users-admin.controller.js';
-import { UsersService } from './users.service.js';
+import { TokenService } from './services/token.service.js';
+import { UsersAdminController } from './controllers/users-admin.controller.js';
+import { UsersService } from './services/users.service.js';
 
 @Module({
   imports: [

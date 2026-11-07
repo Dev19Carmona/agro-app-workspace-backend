@@ -1,5 +1,5 @@
-import { loginSchema } from './login.dto.js';
-import { registerSchema } from './register.dto.js';
+import { loginSchema } from '../dto/login.dto.js';
+import { registerSchema } from '../dto/register.dto.js';
 
 const registro = {
   email: 'Ana@Correo.com',

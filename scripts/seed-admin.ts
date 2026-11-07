@@ -13,7 +13,7 @@ import { z } from 'zod';
 import {
   BCRYPT_COST,
   checkPasswordPolicy,
-} from '../apps/api/src/modules/auth/password.policy.ts';
+} from '../apps/api/src/modules/auth/policies/password.policy.ts';
 
 /** Misma base y colección que el módulo `auth` del monolito `api`. */
 const DB_NAME = 'mini-croper';

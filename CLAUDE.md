@@ -36,6 +36,29 @@ Decisión: **monolito modular + notifications separado**. Ya no son 6 servicios 
 - MongoDB debe correr como **replica set** (`rs0`, un nodo): las transacciones (reserva de stock, outbox) lo exigen. `docker-compose.yml` ya lo levanta así.
 - Cada módulo es dueño de sus colecciones; los schemas de dominio viven en el módulo, no en `libs/common`.
 
+### Estructura de un módulo
+
+Todo módulo de `apps/api/src/modules/<dominio>/` tiene la misma forma: carpetas por tipo de archivo y un `index.ts` como API pública.
+
+```text
+apps/api/src/modules/<dominio>/
+  index.ts                  # API pública del módulo (lo único importable desde fuera)
+  <dominio>.module.ts
+  controllers/              # *.controller.ts
+  services/                 # *.service.ts
+  dto/                      # schemas Zod de entrada (*.dto.ts)
+  schemas/                  # schemas Mongoose (*.schema.ts)
+  events/                   # nombres y payloads de eventos (*.events.ts)
+  policies/                 # reglas puras sin Nest (p. ej. password.policy.ts)
+  tests/                    # TODOS los *.spec.ts del módulo, planos
+```
+
+- En la raíz del módulo solo van `index.ts` y `<dominio>.module.ts`. Cada tipo de archivo va en su carpeta (un controller en `controllers/`, un service en `services/`, etc.); los nombres de archivo no cambian.
+- Las carpetas se crean **solo cuando tienen contenido**: nunca carpetas vacías ni `.gitkeep`. Una carpeta fuera de la lista (p. ej. `guards/`) solo se añade si el módulo la necesita de verdad, y se agrega a esta lista en el mismo cambio.
+- `tests/` es la **única carpeta de pruebas unitarias** del módulo: todos los `*.spec.ts` van ahí, sin subcarpetas, con el nombre del archivo que prueban más `.spec.ts`. Los tests importan por ruta relativa al archivo interno (`../services/auth.service.js`), no por el `index.ts`. Los e2e siguen en `apps/<app>/test/`.
+- `index.ts` es la API pública: lo único que otros módulos y `ApiModule` pueden importar (`modules/<dominio>/index.js`). Nunca se importa un archivo interno de otro módulo. Dentro del módulo se importa por ruta relativa al archivo concreto, con `.js`.
+- Hoy `auth` exporta `AuthModule`, `AuthEvents` y los tipos de sus eventos; `catalog`, `order` y `payments` exportan su `*Module`.
+
 ### Seguridad (módulo `auth`)
 
 Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política de contraseña, bloqueo, límites) están en `docs/reglas-de-negocio.md`; aquí solo cómo se aplican en el código.
@@ -47,7 +70,7 @@ Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política 
 - `applySecurity` (`libs/common/src/security/apply-security.ts`), llamado desde `main.ts`, activa `helmet`, CORS con lista blanca (`CORS_ORIGINS`; vacía = sin orígenes cruzados), quita `X-Powered-By` y limita el body a 100 kb. Con `NODE_ENV=production` `setupSwagger` no publica Swagger.
 - **Proxy:** no se activa `trust proxy`. Detrás de un proxy el throttler vería la IP del proxy y limitaría a todos juntos; decídelo con el despliegue. El throttler guarda sus contadores en memoria (una sola instancia).
 - El access token no se revoca: tras `disable` o un cambio de rol sigue valiendo hasta 15 min. Para que no se pueda renovar, esas acciones revocan los refresh tokens.
-- `auth` emite eventos en memoria con `@nestjs/event-emitter` (`user.registered`, `provider.approved`, `provider.rejected`; nombres en `auth.events.ts`). Todavía no tienen consumidor: los conectará el spec de notificaciones.
+- `auth` emite eventos en memoria con `@nestjs/event-emitter` (`user.registered`, `provider.approved`, `provider.rejected`; nombres en `events/auth.events.ts`). Todavía no tienen consumidor: los conectará el spec de notificaciones.
 
 #### Variables de entorno de `api`
 
@@ -70,7 +93,7 @@ Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política 
 - `npm run build` — `nest build` of `api` only (cleans `dist/`). `npm run build:all` builds `api` and `notifications`.
 - `npm run lint` — `oxlint --type-aware apps/ libs/` (oxlint, not ESLint; `no-floating-promises` is an error).
 - `npm run format` — Prettier (single quotes, trailing commas).
-- `npm test` — Vitest unit tests (`**/*.spec.ts`, colocated next to the code under `apps/` and `libs/`).
+- `npm test` — Vitest unit tests (`**/*.spec.ts`; in `apps/api` they live in each module's `tests/` folder, see "Estructura de un módulo"; elsewhere they are colocated next to the code).
 - Single test: `npx vitest run apps/api/src/modules/auth/auth.controller.spec.ts` or `npx vitest run -t "test name"`.
 - `npm run test:e2e` — e2e tests (`**/*.e2e-spec.ts`, in `apps/<app>/test/`) via `vitest.config.e2e.ts`. Los de `api` necesitan `MONGODB_URI` y MongoDB en replica set; generan sus propias claves JWT y crean usuarios `e2e-*@test.co` en la base `mini-croper`, que borran al terminar (si la suite se corta, pueden quedar).
 

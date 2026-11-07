@@ -1,5 +1,5 @@
-import type { Role } from '../../../../../libs/common/src/security/roles.js';
-import type { UserStatus } from './schemas/user.schema.js';
+import type { Role } from '../../../../../../libs/common/src/security/roles.js';
+import type { UserStatus } from '../schemas/user.schema.js';
 
 /** Nombres de los eventos de dominio de `auth` (en memoria, vía `@nestjs/event-emitter`). */
 export const AuthEvents = {

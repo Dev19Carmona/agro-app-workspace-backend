@@ -6,16 +6,16 @@ import { type Model, Types } from 'mongoose';
 import {
   type AccessTokenPayload,
   type Role,
-} from '../../../../../libs/common/src/security/roles.js';
+} from '../../../../../../libs/common/src/security/roles.js';
 import {
   JWT_ALGORITHM,
   JWT_AUDIENCE,
   JWT_ISSUER,
-} from '../../../../../libs/common/src/security/security.constants.js';
+} from '../../../../../../libs/common/src/security/security.constants.js';
 import {
   RefreshToken,
   type RefreshTokenDocument,
-} from './schemas/refresh-token.schema.js';
+} from '../schemas/refresh-token.schema.js';
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
