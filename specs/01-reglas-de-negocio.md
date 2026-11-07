@@ -4,6 +4,7 @@
 > **Depends on:** Ninguna
 > **Date:** 2026-11-06
 > **Nota (2026-11-06):** este spec es la foto inicial y ya no se mantiene. Las reglas vigentes viven en `docs/reglas-de-negocio.md`, que se edita directamente.
+> **Nota (2026-11-06):** los términos de base relacional (bloqueo de filas, "tablas", TypeORM) se cambiaron a MongoDB al aprobar SPEC 02; es la única edición posterior a la foto inicial.
 > **Objective:** Dejar consolidadas en el repositorio las reglas de negocio del marketplace agropecuario Mini-Croper (dominio, saga, seguridad y arquitectura vigente) como contexto fijo para futuros specs y para el agente.
 
 ## Por qué existe este spec
@@ -27,7 +28,7 @@ Este spec no construye funcionalidad. Los specs de implementación posteriores (
 
 **Fuera de alcance (para specs futuros):**
 
-- Cualquier código: servicios, entidades TypeORM, controladores, migraciones, docker-compose.
+- Cualquier código: servicios, schemas de base de datos, controladores, migraciones, docker-compose.
 - Pagos reales, crédito, logística, búsqueda avanzada, cotizaciones (ver "Mejoras futuras").
 - Cambiar el stack del repo (NestJS 12, Vitest, oxlint, ESM).
 - Colección Postman, datos semilla y README de entrega.
@@ -120,7 +121,7 @@ El `correlationId` es el id del pedido.
 ### Saga de pedido con pago virtual
 
 1. `POST /orders/checkout` guarda el pedido en `PENDING` y emite `order.created`.
-2. El catálogo reserva stock por variante de forma transaccional (`SELECT … FOR UPDATE`).
+2. El catálogo reserva stock por variante de forma transaccional, con una actualización atómica condicional: solo reserva si `stock − stockReservado` alcanza para la cantidad pedida.
    - Alcanza: emite `stock.reserved` y el pedido pasa a `AWAITING_PAYMENT` con vencimiento en 15 min.
    - No alcanza: emite `stock.rejected` y el pedido pasa a `CANCELLED`.
 3. El productor paga con `POST /payments`; pagos valida el monto con pedidos y simula la transacción.
@@ -167,11 +168,11 @@ Decisión del 2026-11-06: **monolito modular** para el núcleo (auth, catalog, o
 
 | App | Puerto | Base de datos | Responsabilidad |
 | --- | --- | --- | --- |
-| api (monolito) | 3000 | una sola BD, con tablas propias por módulo | Módulos `auth` (registro, login, JWT, roles), `catalog` (tiendas, productos, variantes, stock, ofertas), `order` (carrito, checkout, pedidos, sub-pedidos) y `payments` (pasarela simulada y registro de pagos) |
+| api (monolito) | 3000 | una sola BD (MongoDB), con colecciones propias por módulo | Módulos `auth` (registro, login, JWT, roles), `catalog` (tiendas, productos, variantes, stock, ofertas), `order` (carrito, checkout, pedidos, sub-pedidos) y `payments` (pasarela simulada y registro de pagos) |
 | notifications | 3005 | — | Consume eventos y envía avisos simulados |
 
 - Un único proceso expone la API pública con prefijo `/api/v1`; no hay API Gateway. Rutas por módulo: `/auth`, `/catalog`, `/orders`, `/payments`.
-- Dentro del monolito cada módulo es dueño de sus tablas y expone un servicio público; ningún módulo lee las tablas de otro. Las lecturas síncronas (`order` pide precios a `catalog`; `payments` pide monto y estado a `order`) son llamadas a servicios inyectados, no HTTP.
+- Dentro del monolito cada módulo es dueño de sus colecciones y expone un servicio público; ningún módulo lee las colecciones de otro. Las lecturas síncronas (`order` pide precios a `catalog`; `payments` pide monto y estado a `order`) son llamadas a servicios inyectados, no HTTP.
 - Los eventos del catálogo entre módulos del monolito viajan en memoria (`@nestjs/event-emitter`), con patrón outbox si se necesita garantía de entrega.
 - Los eventos que consume `notifications` (`order.confirmed`, `order.cancelled`, `payment.approved`, `payment.declined`, etc.) salen del monolito hacia ese servicio. El transporte (RabbitMQ, Redis u otro) **no está decidido** y se resolverá en el spec de notificaciones.
 - Entregables: Swagger por app, `GET /health`, logs JSON con `correlationId`.

@@ -48,6 +48,11 @@ Pago:   PENDING → PROCESSING → APPROVED | DECLINED | ERROR
 Método de pago: CARD | PSE | NEQUI
 ```
 
+## Persistencia
+
+- Los datos viven en **MongoDB**. Cada módulo es dueño de sus colecciones y ningún otro módulo las lee directamente.
+- Los cambios que deben ser atómicos (reserva de stock, cambio de estado del pedido junto con su evento del outbox) se hacen dentro de una transacción.
+
 ## Catálogo
 
 - Un producto tiene una o más **presentaciones** (variantes), cada una con precio y stock propios (ej. 1 L, 4 L, 20 L; 25 kg, 50 kg).
@@ -88,7 +93,7 @@ Método de pago: CARD | PSE | NEQUI
 ## Saga de pedido con pago virtual
 
 1. `POST /orders/checkout` guarda el pedido en `PENDING` y emite `order.created`.
-2. El catálogo reserva stock por variante de forma transaccional (`SELECT … FOR UPDATE`).
+2. El catálogo reserva stock por variante de forma transaccional, con una actualización atómica condicional: solo reserva si `stock − stockReservado` alcanza para la cantidad pedida.
    - Alcanza: emite `stock.reserved` y el pedido pasa a `AWAITING_PAYMENT` con vencimiento en 15 min.
    - No alcanza: emite `stock.rejected` y el pedido pasa a `CANCELLED`.
 3. El productor paga con `POST /payments`; pagos valida el monto con pedidos y simula la transacción.
@@ -116,7 +121,7 @@ Formato común (el `correlationId` es el id del pedido):
 
 ### Garantías de entrega
 
-- **Outbox:** el evento se guarda en `outbox_events` en la misma transacción que el cambio de estado, y un job periódico (cada 2 s) lo publica y lo marca enviado.
+- **Outbox:** el evento se guarda en la colección `outbox_events` en la misma transacción que el cambio de estado, y un job periódico (cada 2 s) lo publica y lo marca enviado.
 - **Idempotencia de consumidores:** cada consumidor guarda los `eventId` procesados.
 - **Reintentos y DLQ:** *ack* manual; tras 3 fallos el mensaje va a una *dead-letter queue*.
 - **Trazabilidad:** el `correlationId` viaja en headers HTTP y en cada evento.
@@ -144,3 +149,4 @@ Pagos reales, crédito, logística, búsqueda avanzada y cotizaciones. Si se abo
 | Fecha | Cambio | Motivo |
 | --- | --- | --- |
 | 2026-11-06 | Creación del archivo a partir de `specs/01-reglas-de-negocio.md` (solo reglas; sin plan, criterios ni arquitectura). | Las reglas van a cambiar durante el desarrollo y necesitan un documento vivo en lugar de un spec cerrado. |
+| 2026-11-06 | Nueva sección "Persistencia" (MongoDB, colecciones propias por módulo, transacciones). En la saga, la reserva de stock deja de describirse como un bloqueo de filas de base relacional y pasa a ser una actualización atómica condicional. El outbox se guarda en la colección `outbox_events`. | Se eligió MongoDB como base de datos (SPEC 02); las reglas asumían una base relacional. |

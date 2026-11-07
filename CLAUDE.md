@@ -27,10 +27,19 @@ Decisión: **monolito modular + notifications separado**. Ya no son 6 servicios 
 - Rutas HTTP del monolito: un prefijo por módulo (`/auth`, `/catalog`, `/orders`, `/payments`).
 - Los módulos del monolito se hablan por inyección de dependencias o eventos en memoria, nunca por HTTP. Cada módulo exporta solo su API pública y no importa archivos internos de otro módulo, para poder extraerlo después si hace falta.
 - A `notifications` le llegan los eventos de dominio (`payment.approved`, `order.confirmed`, etc.). El transporte (RabbitMQ u otro) **aún no está implementado ni decidido**.
-- `libs/common` guarda código compartido (p. ej. `setupSwagger`).
+- `libs/common` guarda código compartido (p. ej. `setupSwagger`, el schema de entorno `validateEnv` y el `HealthModule` con `GET /health`).
+
+### Persistencia (MongoDB)
+
+- Base de datos: **MongoDB** con `@nestjs/mongoose` (Mongoose). Una base por app con `dbName` fijo en el código: `api` usa `mini-croper` y `notifications` usa `mini-croper-notifications`.
+- Ambas apps leen la misma variable `MONGODB_URI`, validada con Zod (`libs/common/src/config/env.schema.ts`) al arrancar: si falta, la app no inicia.
+- MongoDB debe correr como **replica set** (`rs0`, un nodo): las transacciones (reserva de stock, outbox) lo exigen. `docker-compose.yml` ya lo levanta así.
+- Cada módulo es dueño de sus colecciones; los schemas de dominio viven en el módulo, no en `libs/common`.
 
 ## Commands
 
+- **Primera vez:** copia `.env.example` a `.env` (ignorado por git) y levanta MongoDB con `docker compose up -d --wait`. Sin `MONGODB_URI` ninguna app arranca. `docker compose down` lo detiene y conserva los datos en el volumen `mongo-data`.
+- `GET /health` (puertos 3000 y 3005) responde 200 si MongoDB contesta y 503 si no.
 - `npm run start:dev` — run `api` (default project) with watch mode (`start`, `start:debug`, `start:prod` also exist; prod runs `node dist/apps/api/main`). Listens on `PORT` or 3000. `npm run start:dev:notifications` / `npm run start:prod:notifications` run the notifications service (port 3005; prod runs `node dist/apps/notifications/main`).
 - `npm run build` — `nest build` of `api` only (cleans `dist/`). `npm run build:all` builds `api` and `notifications`.
 - `npm run lint` — `oxlint --type-aware apps/ libs/` (oxlint, not ESLint; `no-floating-promises` is an error).
