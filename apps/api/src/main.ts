@@ -9,6 +9,7 @@ async function bootstrap() {
     description:
       'Documentación y pruebas de la API de Mini-Croper (monolito modular: auth, catalog, orders, payments).',
     tags: [
+      { name: 'health', description: 'Estado del servicio y de MongoDB' },
       { name: 'auth', description: 'Registro, login, JWT y roles' },
       { name: 'catalog', description: 'Tiendas, productos, variantes, stock y ofertas' },
       { name: 'orders', description: 'Carrito, checkout, pedidos y sub-pedidos' },
