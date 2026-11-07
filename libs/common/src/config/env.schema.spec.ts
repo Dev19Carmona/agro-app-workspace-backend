@@ -1,4 +1,5 @@
-import { validateEnv } from './env.schema.js';
+import { generateKeyPairSync } from 'node:crypto';
+import { validateApiEnv, validateEnv } from './env.schema.js';
 
 const URI = 'mongodb://localhost:27017/?replicaSet=rs0&directConnection=true';
 
@@ -25,5 +26,84 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ MONGODB_URI: URI, PORT: 'abc' })).toThrow(
       /PORT/,
     );
+  });
+});
+
+describe('validateApiEnv', () => {
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const weak = generateKeyPairSync('rsa', {
+    modulusLength: 1024,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  });
+  const base = {
+    MONGODB_URI: URI,
+    JWT_PRIVATE_KEY: privateKey,
+    JWT_PUBLIC_KEY: publicKey,
+  };
+
+  it('acepta un par PEM válido', () => {
+    const env = validateApiEnv(base);
+    expect(env.JWT_PRIVATE_KEY).toContain('BEGIN PRIVATE KEY');
+    expect(env.JWT_PUBLIC_KEY).toContain('BEGIN PUBLIC KEY');
+  });
+
+  it('admite saltos de línea escapados como \n', () => {
+    const env = validateApiEnv({
+      ...base,
+      JWT_PRIVATE_KEY: privateKey.trim().replace(/\n/g, '\\n'),
+      JWT_PUBLIC_KEY: publicKey.trim().replace(/\n/g, '\\n'),
+    });
+    expect(env.JWT_PRIVATE_KEY).not.toContain('\\n');
+    expect(env.JWT_PRIVATE_KEY).toContain('\n');
+  });
+
+  it('rechaza si falta JWT_PRIVATE_KEY y nombra la variable', () => {
+    expect(() =>
+      validateApiEnv({ MONGODB_URI: URI, JWT_PUBLIC_KEY: publicKey }),
+    ).toThrow(/JWT_PRIVATE_KEY/);
+  });
+
+  it('rechaza si falta JWT_PUBLIC_KEY y nombra la variable', () => {
+    expect(() =>
+      validateApiEnv({ MONGODB_URI: URI, JWT_PRIVATE_KEY: privateKey }),
+    ).toThrow(/JWT_PUBLIC_KEY/);
+  });
+
+  it('rechaza una clave RSA menor a 2048 bits', () => {
+    expect(() =>
+      validateApiEnv({ ...base, JWT_PRIVATE_KEY: weak.privateKey }),
+    ).toThrow(/JWT_PRIVATE_KEY.*2048/);
+  });
+
+  it('rechaza un PEM inválido', () => {
+    expect(() =>
+      validateApiEnv({ ...base, JWT_PUBLIC_KEY: 'no-es-pem' }),
+    ).toThrow(/JWT_PUBLIC_KEY/);
+  });
+
+  it('rechaza una clave que no es RSA', () => {
+    const ec = generateKeyPairSync('ec', {
+      namedCurve: 'P-256',
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    expect(() =>
+      validateApiEnv({ ...base, JWT_PRIVATE_KEY: ec.privateKey }),
+    ).toThrow(/RSA/);
+  });
+
+  it('CORS_ORIGINS y NODE_ENV son opcionales', () => {
+    const env = validateApiEnv({
+      ...base,
+      CORS_ORIGINS: 'http://localhost:5173',
+      NODE_ENV: 'production',
+    });
+    expect(env.CORS_ORIGINS).toBe('http://localhost:5173');
+    expect(env.NODE_ENV).toBe('production');
   });
 });

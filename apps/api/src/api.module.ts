@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import type { Env } from '../../../libs/common/src/config/env.schema.js';
-import { validateEnv } from '../../../libs/common/src/config/env.schema.js';
+import type { ApiEnv } from '../../../libs/common/src/config/env.schema.js';
+import { validateApiEnv } from '../../../libs/common/src/config/env.schema.js';
 import { HealthModule } from '../../../libs/common/src/health/health.module.js';
+import { SecurityModule } from '../../../libs/common/src/security/security.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CatalogModule } from './modules/catalog/catalog.module.js';
 import { OrderModule } from './modules/order/order.module.js';
@@ -16,14 +17,15 @@ import { PaymentsModule } from './modules/payments/payments.module.js';
  */
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateApiEnv }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService<Env, true>) => ({
+      useFactory: (config: ConfigService<ApiEnv, true>) => ({
         uri: config.get('MONGODB_URI', { infer: true }),
         dbName: 'mini-croper',
       }),
     }),
+    SecurityModule,
     HealthModule,
     AuthModule,
     CatalogModule,
