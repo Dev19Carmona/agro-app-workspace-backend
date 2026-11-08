@@ -35,6 +35,7 @@ const keys = generateKeyPairSync('rsa', {
 });
 process.env.JWT_PRIVATE_KEY = keys.privateKey;
 process.env.JWT_PUBLIC_KEY = keys.publicKey;
+process.env.PAYMENTS_WEBHOOK_SECRET = 'e2e-webhook-secret-0123456789abcdef';
 process.env.CORS_ORIGINS = ALLOWED_ORIGIN;
 
 const signer = new JwtService({ privateKey: keys.privateKey });
@@ -141,7 +142,9 @@ describe('auth y seguridad transversal (e2e)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [ApiModule] })
       .setLogger(new ConsoleLogger({ logLevels: ['log', 'warn', 'error'] }))
       .compile();
-    app = moduleRef.createNestApplication<NestExpressApplication>();
+    app = moduleRef.createNestApplication<NestExpressApplication>({
+      rawBody: true,
+    });
     app.set('trust proxy', true);
     applySecurity(app, { corsOrigins: [ALLOWED_ORIGIN] });
     setupSwagger(app, { title: 'e2e', description: 'e2e' });

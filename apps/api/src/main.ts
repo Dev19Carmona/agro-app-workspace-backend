@@ -10,7 +10,10 @@ import { setupSwagger } from '../../../libs/common/src/swagger/setup-swagger.js'
 import { ApiModule } from './api.module.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(ApiModule);
+  // `rawBody` conserva el cuerpo sin parsear para verificar la firma del webhook de pagos.
+  const app = await NestFactory.create<NestExpressApplication>(ApiModule, {
+    rawBody: true,
+  });
   const config = app.get<ConfigService<ApiEnv, true>>(ConfigService);
   applySecurity(app, {
     corsOrigins: parseCorsOrigins(config.get('CORS_ORIGINS', { infer: true })),

@@ -30,6 +30,7 @@ describe('validateEnv', () => {
 });
 
 describe('validateApiEnv', () => {
+  const SECRET = 'x'.repeat(32);
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
@@ -44,6 +45,7 @@ describe('validateApiEnv', () => {
     MONGODB_URI: URI,
     JWT_PRIVATE_KEY: privateKey,
     JWT_PUBLIC_KEY: publicKey,
+    PAYMENTS_WEBHOOK_SECRET: SECRET,
   };
 
   it('acepta un par PEM válido', () => {
@@ -95,6 +97,21 @@ describe('validateApiEnv', () => {
     expect(() =>
       validateApiEnv({ ...base, JWT_PRIVATE_KEY: ec.privateKey }),
     ).toThrow(/RSA/);
+  });
+
+  it('acepta PAYMENTS_WEBHOOK_SECRET de 32 caracteres', () => {
+    expect(validateApiEnv(base).PAYMENTS_WEBHOOK_SECRET).toBe(SECRET);
+  });
+
+  it('rechaza si falta PAYMENTS_WEBHOOK_SECRET y nombra la variable', () => {
+    const { PAYMENTS_WEBHOOK_SECRET: _omitida, ...sinSecreto } = base;
+    expect(() => validateApiEnv(sinSecreto)).toThrow(/PAYMENTS_WEBHOOK_SECRET/);
+  });
+
+  it('rechaza PAYMENTS_WEBHOOK_SECRET de menos de 32 caracteres', () => {
+    expect(() =>
+      validateApiEnv({ ...base, PAYMENTS_WEBHOOK_SECRET: 'x'.repeat(31) }),
+    ).toThrow(/PAYMENTS_WEBHOOK_SECRET/);
   });
 
   it('CORS_ORIGINS y NODE_ENV son opcionales', () => {

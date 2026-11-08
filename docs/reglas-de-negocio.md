@@ -91,12 +91,24 @@ Método de pago: CARD | PSE | NEQUI
 - El monto lo toma `payments` desde `order`, nunca del cliente.
 - Solo se paga un pedido en `AWAITING_PAYMENT`.
 - Un pedido admite **un único pago aprobado**.
-- `POST /payments` exige el header `Idempotency-Key`; un doble clic no genera dos cobros.
-- El cliente nunca envía datos reales de tarjeta, solo un token de prueba.
-- La simulación tiene latencia de 1 a 3 segundos.
-- El webhook se valida con firma HMAC y se rechaza si la firma o el timestamp no coinciden.
-- Cada intento de pago queda registrado en `PaymentAttempt` (auditoría).
+- `POST /payments` exige el header `Idempotency-Key` (de 8 a 100 caracteres); un doble clic no genera dos cobros.
+  - Repetir la misma clave con el mismo cuerpo (`orderId`, `metodo`, `token`) devuelve el mismo pago con `200`, aunque el pedido ya haya cambiado; el primer intento responde `201`, también si el resultado es `DECLINED` o `ERROR` (el resultado va en `status`). La misma clave con otro cuerpo responde `422`.
+  - Una clave ya usada devuelve siempre el mismo resultado: para volver a intentar el cobro tras un `DECLINED` o `ERROR` se usa una clave nueva.
+- Un pedido admite **un único pago activo o aprobado**: con otro pago en `PENDING`, `PROCESSING` o `APPROVED` el nuevo responde `409` (`PAYMENT_IN_PROGRESS`). Solo se reintenta tras `DECLINED` o `ERROR`.
+- Un pedido que no está en `AWAITING_PAYMENT`, o cuyo `expiresAt` ya pasó aunque el job no lo haya cancelado, responde `409` (`ORDER_NOT_PAYABLE`); inexistente o de otro comprador, `404`.
+- El cliente nunca envía datos reales de tarjeta, solo un token de prueba, y ese token no se guarda.
+- La simulación tiene latencia de 1 a 3 segundos y `POST /payments` responde cuando termina.
+- Cada intento de pago queda registrado en `PaymentAttempt` (auditoría), sin token ni firma.
 - Un pago `DECLINED` o `ERROR` deja el pedido en `AWAITING_PAYMENT` y el productor puede reintentar mientras no venza.
+- `PRODUCTOR` consulta sus pagos (ajeno: `404`); `ADMIN` consulta todos, con filtros por estado, comprador y pedido y el historial de intentos, en solo lectura. Ninguna respuesta incluye la `Idempotency-Key` ni su hash.
+
+### Webhook de la pasarela
+
+- `POST /payments/webhook` no lleva JWT: se autentica solo por firma. `X-Signature` es el HMAC-SHA256 hexadecimal de `${X-Timestamp}.${cuerpo crudo}` con el secreto `PAYMENTS_WEBHOOK_SECRET`, y `X-Timestamp` son segundos Unix.
+- Se rechaza con `401` (mismo mensaje genérico) si falta un header, el timestamp está a más de 300 s de la hora actual o la firma no coincide. La firma se verifica antes de validar el cuerpo.
+- Cada `eventId` se procesa una sola vez: repetirlo responde `200` sin cambios.
+- Solo resuelve pagos en `PROCESSING`; el resultado puede ser `APPROVED`, `DECLINED` o `ERROR`. Un pago ya resuelto responde `200` sin cambios y sin revelar su estado. Un pago inexistente responde `404`.
+- **Pago tardío:** el webhook marca el pago `APPROVED` aunque el pedido ya haya vencido o esté cancelado, y emite `payment.approved`; `order` decide (confirma si sigue en `AWAITING_PAYMENT`, si no lo ignora con un aviso). El cobro huérfano es un riesgo aceptado; los reembolsos quedan fuera de alcance.
 
 ### Tokens de prueba del simulador
 
@@ -153,6 +165,7 @@ Formato común (el `correlationId` es el id del pedido):
 
 - **Outbox:** el evento se guarda en la colección `outbox_events` en la misma transacción que el cambio de estado, y un job periódico (cada 2 s) lo publica y lo marca enviado. `order` nunca emite `order.*` directamente: el outbox es su único camino de emisión.
 - **Estados del outbox:** `PENDING`, `PUBLISHED` y `FAILED`. Un fallo de publicación se reintenta con espera creciente (2 s × 2^intento, máximo 60 s) y tras **5 intentos** el evento queda en `FAILED` para revisión manual. Es entrega al menos una vez: si el proceso cae tras publicar y antes de marcar, el evento se publica de nuevo.
+- **Eventos de pago:** `payments` no usa el outbox (es de `order`). Emite `payment.approved` y `payment.declined` en memoria tras confirmar el cambio de estado; `payment.declined` cubre `DECLINED` y `ERROR`. Si la emisión falla, un job (cada 10 s) reemite con el mismo `eventId` los pagos finales sin marca de emisión, hasta **5 reemisiones**, y después queda visible en el documento del pago. `order` ignora los `eventId` ya procesados.
 - **Idempotencia de consumidores:** cada consumidor guarda los `eventId` procesados en su propia colección (`processed_events` en `catalog`, `order_processed_events` en `order`). Marcar el evento y aplicar su efecto ocurre en la misma transacción.
 - **Reintentos y DLQ:** *ack* manual; tras 3 fallos el mensaje va a una *dead-letter queue*. Depende del transporte hacia `notifications`, que aún no está decidido, así que todavía no se implementa. Mientras tanto rige el límite de 5 intentos del outbox.
 - **Trazabilidad:** el `correlationId` viaja en headers HTTP y en cada evento.
@@ -180,6 +193,7 @@ Formato común (el `correlationId` es el id del pedido):
 - RBAC con `@Roles(...)` y `RolesGuard`, más reglas de propiedad: PROVEEDOR solo su tienda, PRODUCTOR solo sus pedidos, solo ADMIN todos los pagos.
 - Rate limiting por IP: 100 req/min en general; 5/min en `/auth/login`, `/auth/register` y `/auth/change-password`; 10/min en `/auth/refresh` y en `/payments`.
 - Endpoints `/internal/*` (p. ej. del servicio `notifications`) protegidos con token de servicio y no expuestos por `api`.
+- `PAYMENTS_WEBHOOK_SECRET` (mínimo 32 caracteres) es obligatoria: sin ella `api` no arranca, porque el webhook quedaría abierto. Los logs no incluyen tokens de pago, firmas, el secreto ni el cuerpo crudo del webhook.
 - Validación estricta de entrada que rechace propiedades desconocidas (evita *mass assignment*).
 - El sistema nunca recibe ni guarda datos de tarjeta (fuera de alcance PCI DSS).
 - Habeas Data (Ley 1581 de 2012): consentimiento explícito al registrarse y mínimo de datos.
@@ -198,3 +212,4 @@ Pagos reales, crédito, logística, búsqueda avanzada y cotizaciones. Si se abo
 | 2026-11-07 | Regla nueva: un `PROVEEDOR` no se registra solo, queda `PENDING_APPROVAL` y un `ADMIN` aprueba o rechaza su solicitud. Nuevos estados del usuario (`ACTIVE`, `PENDING_APPROVAL`, `REJECTED`, `DISABLED`) y sección "Cuentas y acceso". Se concretan: política de contraseña, `bcrypt` con costo 12, bloqueo de 15 min tras 5 fallos, rotación del refresh token con revocación de la sesión ante reuso y límites de peticiones por endpoint de `auth`. Nuevos eventos `provider.approved` y `provider.rejected`. | Implementación del módulo `auth` (SPEC 03). La aprobación de proveedores no estaba en las reglas originales y el resto afinaba reglas que solo daban un mínimo. |
 | 2026-11-08 | Reglas del catálogo: una tienda por `PROVEEDOR` con `storeId` asignado por el evento `store.created`; tienda desactivable por `ADMIN`; `activo` en producto, variante y categoría (sin `DELETE`); consulta pública sin lo inactivo y variantes sin stock visibles con `disponible = 0`; precios enteros en COP; stock manual absoluto sin bajar de `stockReservado`. Nueva subsección "Reservas de stock" con `StockReservation` y el efecto de `order.confirmed` y `order.cancelled` sobre el stock (un pedido cancelado por `stock.rejected` no libera nada). Nuevo evento `store.created`. | Implementación del módulo `catalog` (SPEC 06). Las reglas no decían qué libera `order.cancelled` tras un `stock.rejected` ni qué hace `order.confirmed` en el catálogo. |
 | 2026-11-08 | Reglas de pedidos: carrito del `PRODUCTOR` (uno por usuario, máximo 50 líneas, cantidad de 1 a 1000, solo la variante y la cantidad); `Idempotency-Key` en el checkout; snapshot del ítem; vista del `PROVEEDOR` sin `buyerId` ni `total` y autorizada por el `storeId` del token; `ADMIN` solo lectura; sin cancelación manual. Saga: un `PENDING` sin respuesta del catálogo en 5 min se cancela (`STOCK_TIMEOUT`); **pago tardío** (`payment.approved` confirma mientras el estado sea `AWAITING_PAYMENT`, aunque haya vencido); **reserva tardía** (`stock.reserved` sobre un pedido `CANCELLED` re-emite `order.cancelled` con `LATE_RESERVATION`); `stock.released` solo se registra en `order`. Garantías de entrega: estados del outbox (`PENDING`, `PUBLISHED`, `FAILED`), 5 intentos con espera creciente, colección de idempotencia propia de cada módulo; la DLQ de 3 fallos depende del transporte y no se implementa todavía. | Implementación del módulo `order` (SPEC 07). Las reglas no decían qué hacer con un pago o una reserva que llegan después de cancelar el pedido, para qué consume `order` el evento `stock.released`, ni qué ocurre si el catálogo nunca responde; y la DLQ presupone un transporte que aún no existe. |
+| 2026-11-08 | Reglas de pagos: semántica de `Idempotency-Key` (misma clave y cuerpo = mismo pago con `200`; otro cuerpo = `422`; el primer intento responde `201` aunque el resultado sea `DECLINED` o `ERROR`; reintentar el cobro exige una clave nueva); un solo pago activo o aprobado por pedido (`409 PAYMENT_IN_PROGRESS`); `409 ORDER_NOT_PAYABLE` también con `expiresAt` pasado; consulta del `PRODUCTOR` y del `ADMIN`. Nueva subsección "Webhook de la pasarela": firma HMAC-SHA256 sobre `${timestamp}.${cuerpo crudo}`, tolerancia de 300 s, un `eventId` se procesa una sola vez, un pago ya resuelto responde `200` sin cambios, `ERROR` puede llegar por webhook y **pago tardío** (queda `APPROVED` aunque el pedido haya vencido; `order` decide). Los eventos `payment.*` se emiten en memoria con reemisión de hasta 5 intentos, sin outbox. Variable obligatoria `PAYMENTS_WEBHOOK_SECRET`. | Implementación del módulo `payments` (SPEC 08). Las reglas no decían qué hace el webhook con un pago ya resuelto, si `ERROR` puede llegar por webhook, ni qué pasa con un pago que llega tras vencer el pedido; y la idempotencia, la firma y la entrega de eventos solo tenían un mínimo. |
