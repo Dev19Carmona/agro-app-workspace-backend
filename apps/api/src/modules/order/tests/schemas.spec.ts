@@ -32,7 +32,10 @@ describe('referencias ObjectId', () => {
     [OrderItemSchema, 'variantId'],
     [OrderItemSchema, 'productId'],
   ] as const)('%s.%s es un ObjectId, no Mixed', (schema, campo) => {
-    expect(schema.path(campo).instance).toBe('ObjectId');
+    const tipo = (schema as { path(p: string): { instance: string } }).path(
+      campo,
+    );
+    expect(tipo.instance).toBe('ObjectId');
   });
 
   it('castea un id en string a ObjectId al crear', () => {

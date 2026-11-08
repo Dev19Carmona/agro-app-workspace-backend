@@ -18,6 +18,7 @@ import {
 import { SubOrder, SubOrderSchema } from './schemas/sub-order.schema.js';
 import { CartService } from './services/cart.service.js';
 import { OrderService } from './services/order.service.js';
+import { OutboxService } from './services/outbox.service.js';
 
 @Module({
   imports: [
@@ -33,6 +34,6 @@ import { OrderService } from './services/order.service.js';
     ]),
   ],
   controllers: [OrderController, CartController],
-  providers: [OrderService, CartService],
+  providers: [OrderService, CartService, OutboxService],
 })
 export class OrderModule {}
