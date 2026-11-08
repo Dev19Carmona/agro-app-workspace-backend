@@ -8,6 +8,7 @@ import { HealthModule } from '../../../libs/common/src/health/health.module.js';
 import { SecurityModule } from '../../../libs/common/src/security/security.module.js';
 import { AuthModule } from './modules/auth/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
+import { NotificationBridgeModule } from './modules/notification-bridge/index.js';
 import { OrderModule } from './modules/order/index.js';
 import { PaymentsModule } from './modules/payments/index.js';
 
@@ -33,6 +34,7 @@ import { PaymentsModule } from './modules/payments/index.js';
     CatalogModule,
     OrderModule,
     PaymentsModule,
+    NotificationBridgeModule,
   ],
 })
 export class ApiModule {}

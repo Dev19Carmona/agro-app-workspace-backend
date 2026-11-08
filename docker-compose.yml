@@ -19,5 +19,27 @@ services:
       retries: 10
       start_period: 10s
 
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: mini-croper-rabbitmq
+    # RabbitMQ liga sus datos al hostname: fijo para que el volumen sobreviva a recrear el contenedor.
+    hostname: mini-croper-rabbit
+    ports:
+      - '5672:5672'
+      - '15672:15672' # consola de administración
+    environment:
+      # Credenciales de desarrollo (las mismas de .env.example); no son de producción.
+      RABBITMQ_DEFAULT_USER: mini-croper
+      RABBITMQ_DEFAULT_PASS: mini-croper-dev
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
 volumes:
   mongo-data:
+  rabbit-data:

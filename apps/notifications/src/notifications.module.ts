@@ -4,8 +4,13 @@ import { MongooseModule } from '@nestjs/mongoose';
 import type { Env } from '../../../libs/common/src/config/env.schema.js';
 import { validateEnv } from '../../../libs/common/src/config/env.schema.js';
 import { HealthModule } from '../../../libs/common/src/health/health.module.js';
-import { NotificationsController } from './notifications.controller.js';
-import { NotificationsService } from './notifications.service.js';
+import { RabbitMqConnection } from '../../../libs/common/src/messaging/rabbitmq-connection.js';
+import { EventsConsumer } from './consumers/events.consumer.js';
+import {
+  Notification,
+  NotificationSchema,
+} from './schemas/notification.schema.js';
+import { NotificationsService } from './services/notifications.service.js';
 
 @Module({
   imports: [
@@ -17,9 +22,20 @@ import { NotificationsService } from './notifications.service.js';
         dbName: 'mini-croper-notifications',
       }),
     }),
+    MongooseModule.forFeature([
+      { name: Notification.name, schema: NotificationSchema },
+    ]),
     HealthModule,
   ],
-  controllers: [NotificationsController],
-  providers: [NotificationsService],
+  providers: [
+    NotificationsService,
+    {
+      provide: RabbitMqConnection,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) =>
+        new RabbitMqConnection(config.get('RABBITMQ_URI', { infer: true })),
+    },
+    EventsConsumer,
+  ],
 })
 export class NotificationsModule {}
