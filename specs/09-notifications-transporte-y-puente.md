@@ -1,6 +1,6 @@
 # SPEC 09 — Notifications: transporte RabbitMQ, puente con outbox y consumidor (un evento de punta a punta)
 
-> **Status:** Aprobado
+> **Status:** Implementado
 > **Depends on:** SPEC 02, SPEC 03, SPEC 04, SPEC 07, SPEC 08
 > **Date:** 2026-11-08
 > **Objective:** Implementar la infraestructura que lleva los eventos de dominio del monolito `api` al servicio `notifications` (RabbitMQ, puente con outbox propio, consumidor con ack manual y DLQ, y colección de avisos) y verificarla de punta a punta con el evento `provider.approved`.
