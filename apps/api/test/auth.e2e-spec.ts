@@ -179,7 +179,7 @@ describe('auth y seguridad transversal (e2e)', () => {
 
   describe('rutas protegidas y públicas', () => {
     const protegidas = [
-      '/catalog',
+      '/catalog/my-store',
       '/orders',
       '/payments',
       '/auth/me',
@@ -231,7 +231,7 @@ describe('auth y seguridad transversal (e2e)', () => {
       'token %s responde 401',
       async (_caso, token) => {
         const valor = typeof token === 'function' ? token() : token;
-        for (const ruta of ['/catalog', '/auth/users']) {
+        for (const ruta of ['/catalog/my-store', '/auth/users']) {
           expect((await call('get', ruta, { token: valor })).status).toBe(401);
         }
       },
@@ -239,7 +239,7 @@ describe('auth y seguridad transversal (e2e)', () => {
 
     it('un token válido pasa el guard', async () => {
       expect(
-        (await call('get', '/catalog', { token: adminToken })).status,
+        (await call('get', '/auth/users', { token: adminToken })).status,
       ).toBe(200);
     });
 
@@ -676,7 +676,7 @@ describe('auth y seguridad transversal (e2e)', () => {
       let ultimo = 0;
       let primeros = new Set<number>();
       for (let i = 0; i < 101; i++) {
-        ultimo = (await call('get', '/catalog', { ip })).status;
+        ultimo = (await call('get', '/catalog/my-store', { ip })).status;
         if (i < 100) primeros.add(ultimo);
       }
       expect([...primeros]).toEqual([401]);

@@ -14,6 +14,7 @@ import { User, UserSchema } from './schemas/user.schema.js';
 import { TokenService } from './services/token.service.js';
 import { UsersAdminController } from './controllers/users-admin.controller.js';
 import { UsersService } from './services/users.service.js';
+import { StoreAssignmentService } from './services/store-assignment.service.js';
 
 @Module({
   imports: [
@@ -30,6 +31,12 @@ import { UsersService } from './services/users.service.js';
     }),
   ],
   controllers: [AuthController, UsersAdminController],
-  providers: [AuthService, PasswordService, TokenService, UsersService],
+  providers: [
+    AuthService,
+    PasswordService,
+    TokenService,
+    UsersService,
+    StoreAssignmentService,
+  ],
 })
 export class AuthModule {}

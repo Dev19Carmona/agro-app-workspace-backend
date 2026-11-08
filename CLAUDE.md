@@ -35,6 +35,7 @@ Decisión: **monolito modular + notifications separado**. Ya no son 6 servicios 
 - Ambas apps leen la misma variable `MONGODB_URI`, validada con Zod (`libs/common/src/config/env.schema.ts`) al arrancar: si falta, la app no inicia. `api` valida con `validateApiEnv` (suma las variables de seguridad de abajo) y `notifications` con `validateEnv`, así que no le exige claves JWT.
 - MongoDB debe correr como **replica set** (`rs0`, un nodo): las transacciones (reserva de stock, outbox) lo exigen. `docker-compose.yml` ya lo levanta así.
 - Cada módulo es dueño de sus colecciones; los schemas de dominio viven en el módulo, no en `libs/common`.
+- Los campos de referencia a otro documento se declaran con `@Prop({ type: MongooseSchema.Types.ObjectId })` (`import { Schema as MongooseSchema } from 'mongoose'`). Con `type: Types.ObjectId` Mongoose los trata como `Mixed` y guarda strings.
 
 ### Estructura de un módulo
 
@@ -57,7 +58,7 @@ apps/api/src/modules/<dominio>/
 - Las carpetas se crean **solo cuando tienen contenido**: nunca carpetas vacías ni `.gitkeep`. Una carpeta fuera de la lista (p. ej. `guards/`) solo se añade si el módulo la necesita de verdad, y se agrega a esta lista en el mismo cambio.
 - `tests/` es la **única carpeta de pruebas unitarias** del módulo: todos los `*.spec.ts` van ahí, sin subcarpetas, con el nombre del archivo que prueban más `.spec.ts`. Los tests importan por ruta relativa al archivo interno (`../services/auth.service.js`), no por el `index.ts`. Los e2e siguen en `apps/<app>/test/`.
 - `index.ts` es la API pública: lo único que otros módulos y `ApiModule` pueden importar (`modules/<dominio>/index.js`). Nunca se importa un archivo interno de otro módulo. Dentro del módulo se importa por ruta relativa al archivo concreto, con `.js`.
-- Hoy `auth` exporta `AuthModule`, `AuthEvents` y los tipos de sus eventos; `catalog`, `order` y `payments` exportan su `*Module`.
+- Hoy `auth` exporta `AuthModule`, `AuthEvents` y los tipos de sus eventos. `catalog` exporta `CatalogModule`, `CatalogQueryService` (con `getCheckoutVariants`, que usará `order` para tomar el precio del catálogo), `CatalogEvents`, `ConsumedOrderEvents`, el tipo `DomainEvent`, los tipos de sus payloads y `CheckoutVariant`. `order` y `payments` exportan su `*Module`.
 
 ### Seguridad (módulo `auth`)
 
@@ -71,6 +72,7 @@ Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política 
 - **Proxy:** no se activa `trust proxy`. Detrás de un proxy el throttler vería la IP del proxy y limitaría a todos juntos; decídelo con el despliegue. El throttler guarda sus contadores en memoria (una sola instancia).
 - El access token no se revoca: tras `disable` o un cambio de rol sigue valiendo hasta 15 min. Para que no se pueda renovar, esas acciones revocan los refresh tokens.
 - `auth` emite eventos en memoria con `@nestjs/event-emitter` (`user.registered`, `provider.approved`, `provider.rejected`; nombres en `events/auth.events.ts`). Todavía no tienen consumidor: los conectará el spec de notificaciones.
+- `catalog` emite en memoria `store.created` (sin sobre, como los de `auth`) al crearse una tienda; `auth` lo escucha en `StoreAssignmentService` y guarda `User.storeId` (es el único punto donde `auth` importa de `catalog`, solo vía `modules/catalog/index.js`). `catalog` también escucha `order.created`, `order.confirmed` y `order.cancelled` y emite `stock.reserved`, `stock.rejected` y `stock.released` con el sobre `DomainEvent`, después del commit de su transacción.
 
 #### Variables de entorno de `api`
 
