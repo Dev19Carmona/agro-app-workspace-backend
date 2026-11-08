@@ -26,13 +26,13 @@ Decisión: **monolito modular + notifications separado**. Ya no son 6 servicios 
 
 - Rutas HTTP del monolito: un prefijo por módulo (`/auth`, `/catalog`, `/orders`, `/payments`).
 - Los módulos del monolito se hablan por inyección de dependencias o eventos en memoria, nunca por HTTP. Cada módulo exporta solo su API pública y no importa archivos internos de otro módulo, para poder extraerlo después si hace falta.
-- A `notifications` le llegan los eventos de dominio (`payment.approved`, `order.confirmed`, etc.). El transporte (RabbitMQ u otro) **aún no está implementado ni decidido**.
-- `libs/common` guarda código compartido (p. ej. `setupSwagger`, los schemas de entorno `validateEnv` y `validateApiEnv`, el `HealthModule` con `GET /health` y la seguridad transversal en `security/`).
+- A `notifications` le llegan los eventos de dominio por **RabbitMQ** (`amqplib` directo, envoltorio en `libs/common/src/messaging/`), a través del módulo `notification-bridge` del monolito. Hoy solo `provider.approved` está cableado (SPEC 09); `user.registered`, `provider.rejected`, `payment.*` y `order.*` llegan en el SPEC 10.
+- `libs/common` guarda código compartido (p. ej. `setupSwagger`, el envoltorio de mensajería `messaging/` (topología, schema del sobre `DomainEvent`, `RabbitMqConnection`), los schemas de entorno `validateEnv` y `validateApiEnv`, el `HealthModule` con `GET /health` y la seguridad transversal en `security/`).
 
 ### Persistencia (MongoDB)
 
 - Base de datos: **MongoDB** con `@nestjs/mongoose` (Mongoose). Una base por app con `dbName` fijo en el código: `api` usa `mini-croper` y `notifications` usa `mini-croper-notifications`.
-- Ambas apps leen la misma variable `MONGODB_URI`, validada con Zod (`libs/common/src/config/env.schema.ts`) al arrancar: si falta, la app no inicia. `api` valida con `validateApiEnv` (suma las variables de seguridad de abajo) y `notifications` con `validateEnv`, así que no le exige claves JWT.
+- Ambas apps leen la misma variable `MONGODB_URI` (y `RABBITMQ_URI`, ver "Mensajería"), validada con Zod (`libs/common/src/config/env.schema.ts`) al arrancar: si falta, la app no inicia. `api` valida con `validateApiEnv` (suma las variables de seguridad de abajo) y `notifications` con `validateEnv`, así que no le exige claves JWT.
 - MongoDB debe correr como **replica set** (`rs0`, un nodo): las transacciones (reserva de stock, outbox) lo exigen. `docker-compose.yml` ya lo levanta así.
 - Cada módulo es dueño de sus colecciones; los schemas de dominio viven en el módulo, no en `libs/common`.
 - Los campos de referencia a otro documento se declaran con `@Prop({ type: MongooseSchema.Types.ObjectId })` (`import { Schema as MongooseSchema } from 'mongoose'`). Con `type: Types.ObjectId` Mongoose los trata como `Mixed` y guarda strings.
@@ -58,7 +58,7 @@ apps/api/src/modules/<dominio>/
 - Las carpetas se crean **solo cuando tienen contenido**: nunca carpetas vacías ni `.gitkeep`. Una carpeta fuera de la lista (p. ej. `guards/`) solo se añade si el módulo la necesita de verdad, y se agrega a esta lista en el mismo cambio.
 - `tests/` es la **única carpeta de pruebas unitarias** del módulo: todos los `*.spec.ts` van ahí, sin subcarpetas, con el nombre del archivo que prueban más `.spec.ts`. Los tests importan por ruta relativa al archivo interno (`../services/auth.service.js`), no por el `index.ts`. Los e2e siguen en `apps/<app>/test/`.
 - `index.ts` es la API pública: lo único que otros módulos y `ApiModule` pueden importar (`modules/<dominio>/index.js`). Nunca se importa un archivo interno de otro módulo. Dentro del módulo se importa por ruta relativa al archivo concreto, con `.js`.
-- Hoy `auth` exporta `AuthModule`, `AuthEvents` y los tipos de sus eventos. `catalog` exporta `CatalogModule`, `CatalogQueryService` (con `getCheckoutVariants`, que usará `order` para tomar el precio del catálogo), `CatalogEvents`, `ConsumedOrderEvents`, el tipo `DomainEvent`, los tipos de sus payloads y `CheckoutVariant`. `order` exporta `OrderModule`, `OrderQueryService` (con `getOrderForPayment`, que usará `payments` para tomar el monto y el estado del pedido), `OrderEvents`, `ConsumedEvents`, el tipo `DomainEvent`, los tipos de sus payloads y `OrderForPayment`. `payments` exporta `PaymentsModule`, `PaymentEvents` y los tipos `PaymentApprovedPayload` y `PaymentDeclinedPayload` (reexportados de `order`).
+- Hoy `auth` exporta `AuthModule`, `AuthEvents` y los tipos de sus eventos. `catalog` exporta `CatalogModule`, `CatalogQueryService` (con `getCheckoutVariants`, que usará `order` para tomar el precio del catálogo), `CatalogEvents`, `ConsumedOrderEvents`, el tipo `DomainEvent`, los tipos de sus payloads y `CheckoutVariant`. `notification-bridge` exporta solo `NotificationBridgeModule`. `order` exporta `OrderModule`, `OrderQueryService` (con `getOrderForPayment`, que usará `payments` para tomar el monto y el estado del pedido), `OrderEvents`, `ConsumedEvents`, el tipo `DomainEvent`, los tipos de sus payloads y `OrderForPayment`. `payments` exporta `PaymentsModule`, `PaymentEvents` y los tipos `PaymentApprovedPayload` y `PaymentDeclinedPayload` (reexportados de `order`).
 
 ### Seguridad (módulo `auth`)
 
@@ -78,10 +78,19 @@ Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política 
 - `auth` emite eventos en memoria con `@nestjs/event-emitter` (`user.registered`, `provider.approved`, `provider.rejected`; nombres en `events/auth.events.ts`). Todavía no tienen consumidor: los conectará el spec de notificaciones.
 - `catalog` emite en memoria `store.created` (sin sobre, como los de `auth`) al crearse una tienda; `auth` lo escucha en `StoreAssignmentService` y guarda `User.storeId` (es el único punto donde `auth` importa de `catalog`, solo vía `modules/catalog/index.js`). `catalog` también escucha `order.created`, `order.confirmed` y `order.cancelled` y emite `stock.reserved`, `stock.rejected` y `stock.released` con el sobre `DomainEvent`, después del commit de su transacción.
 
+### Mensajería (RabbitMQ)
+
+- **Topología** (`libs/common/src/messaging/topology.ts`, `declareTopology` la llaman las dos apps al conectar): exchange `topic` `mini-croper.events` (routing key = `type`), cola `quorum` `notifications.events` enlazada a `NOTIFIABLE_EVENTS`, DLX `fanout` `mini-croper.events.dlx` y DLQ `notifications.events.dlq`. Un evento nuevo para `notifications` se añade a `NOTIFIABLE_EVENTS`, a la lista blanca del puente y al registro de plantillas.
+- **Puente (`notification-bridge`, en `api`):** `BridgeListenerService` escucha el evento en memoria, le pone `eventId` uuid, filtra el payload con la lista blanca (`policies/event-sanitizer.policy.ts`; el `email` nunca sale) y lo guarda en `notification_outbox`. `BridgePublisherService` (job cada 2 s, `@Interval`) lo publica con confirmación tras el token `EVENT_PUBLISHER` (`RabbitMqEventPublisher`). Con el broker caído salta el ciclo sin gastar intentos; `api` arranca igual.
+- **Consumidor (`notifications`):** `EventsConsumer` con ack manual y prefetch 10. Mensaje inválido: `nack` sin requeue (DLQ). Fallo de procesamiento: `nack` con requeue y, a la 3.ª entrega, sin requeue. **El tope de 3 lo cuenta el consumidor con la cabecera `x-acquired-count`**: `x-delivery-limit` no cuenta los `nack` con requeue en RabbitMQ 4.x y la cola reentregaba sin fin (se queda en la cola solo como respaldo). La idempotencia es el índice único de `notifications` (`eventId`, destinatario).
+- `RabbitMqConnection` reconecta a los 5 s; `start()` no lanza con el broker caído.
+- La consola de RabbitMQ está en http://localhost:15672 (usuario y clave de desarrollo del `docker-compose.yml`).
+
 #### Variables de entorno de `api`
 
 | Variable | Obligatoria | Nota |
 | --- | --- | --- |
+| `RABBITMQ_URI` | Sí (también en `notifications`) | `amqp://usuario:clave@host:5672`; sin ella ninguna app arranca |
 | `JWT_PRIVATE_KEY` | Sí | PEM RSA de 2048 bits o más; admite `\n` escapados |
 | `JWT_PUBLIC_KEY` | Sí | PEM correspondiente |
 | `PAYMENTS_WEBHOOK_SECRET` | Sí | Secreto compartido del HMAC del webhook de pagos; mínimo 32 caracteres |
@@ -92,9 +101,10 @@ Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política 
 
 ## Commands
 
-- **Primera vez:** copia `.env.example` a `.env` (ignorado por git), genera las claves JWT y levanta MongoDB con `docker compose up -d --wait`. Sin `MONGODB_URI` ninguna app arranca; sin `JWT_PRIVATE_KEY` o `JWT_PUBLIC_KEY` no arranca `api` (`notifications` sí) y el error nombra la variable. `docker compose down` lo detiene y conserva los datos en el volumen `mongo-data`.
+- **Primera vez:** copia `.env.example` a `.env` (ignorado por git), genera las claves JWT y levanta MongoDB y RabbitMQ con `docker compose up -d --wait`. Sin `MONGODB_URI` o `RABBITMQ_URI` ninguna app arranca; sin `JWT_PRIVATE_KEY` o `JWT_PUBLIC_KEY` no arranca `api` (`notifications` sí) y el error nombra la variable. `docker compose down` lo detiene y conserva los datos en el volumen `mongo-data`.
 - `npm run keys:generate` — imprime un par RSA 2048 como dos líneas `JWT_PRIVATE_KEY=` y `JWT_PUBLIC_KEY=` (saltos de línea como `\n`) para pegar en `.env`. No escribe nada en disco.
 - `ADMIN_EMAIL=admin@correo.com ADMIN_PASSWORD='...' npm run seed:admin` — crea el primer ADMIN (el registro público nunca crea uno). Sin credenciales por defecto, aplica la misma política de contraseña que el registro y es idempotente: si el email ya es ADMIN no hace nada, y si es de otro rol falla sin tocarlo. Pasa las dos variables en el comando, no las dejes en `.env`. Node ejecuta `scripts/seed-admin.ts` directamente (sin transpilar), por eso solo importa archivos sin decoradores (`password.policy.ts`); `scripts/` queda fuera de lint y typecheck.
+- **Prueba de punta a punta del puente:** con `docker compose up -d --wait`, `npm run build:all` y las dos apps corriendo (`node dist/apps/api/main` y `node dist/apps/notifications/main`), crea un ADMIN con `seed:admin`, registra un PROVEEDOR, apruébalo (`POST /auth/users/:id/approve`) y comprueba que `notification_outbox` (base `mini-croper`) queda `PUBLISHED` y que hay un documento en `notifications` (base `mini-croper-notifications`). Los e2e de `apps/notifications/test` y `apps/api/test/notification-bridge` lo automatizan y usan la cola real `notifications.events` (la vacían).
 - `GET /health` (puertos 3000 y 3005) responde 200 si MongoDB contesta y 503 si no.
 - `npm run start:dev` — run `api` (default project) with watch mode (`start`, `start:debug`, `start:prod` also exist; prod runs `node dist/apps/api/main`). Listens on `PORT` or 3000. `npm run start:dev:notifications` / `npm run start:prod:notifications` run the notifications service (port 3005; prod runs `node dist/apps/notifications/main`).
 - `npm run build` — `nest build` of `api` only (cleans `dist/`). `npm run build:all` builds `api` and `notifications`.
@@ -102,7 +112,7 @@ Las reglas de negocio (estados del usuario, aprobación de PROVEEDOR, política 
 - `npm run format` — Prettier (single quotes, trailing commas).
 - `npm test` — Vitest unit tests (`**/*.spec.ts`; in `apps/api` they live in each module's `tests/` folder, see "Estructura de un módulo"; elsewhere they are colocated next to the code).
 - Single test: `npx vitest run apps/api/src/modules/auth/auth.controller.spec.ts` or `npx vitest run -t "test name"`.
-- `npm run test:e2e` — e2e tests (`**/*.e2e-spec.ts`, in `apps/<app>/test/`) via `vitest.config.e2e.ts`. Los de `api` necesitan `MONGODB_URI` y MongoDB en replica set; generan sus propias claves JWT y crean usuarios `e2e-*@test.co` en la base `mini-croper`, que borran al terminar (si la suite se corta, pueden quedar).
+- `npm run test:e2e` — e2e tests (`**/*.e2e-spec.ts`, in `apps/<app>/test/`) via `vitest.config.e2e.ts`. Los de `api` necesitan `MONGODB_URI`, MongoDB en replica set y, los de `notification-bridge`, `RABBITMQ_URI` con RabbitMQ arriba (también los de `notifications`); generan sus propias claves JWT y crean usuarios `e2e-*@test.co` en la base `mini-croper`, que borran al terminar (si la suite se corta, pueden quedar).
 
 ## Conventions that differ from typical Nest projects
 

@@ -4,6 +4,7 @@ import { z } from 'zod';
 /** Variables de entorno compartidas por las apps del workspace. */
 export const envSchema = z.object({
   MONGODB_URI: z.url(),
+  RABBITMQ_URI: z.string().regex(/^amqps?:\/\//),
   PORT: z.coerce.number().int().positive().optional(),
 });
 

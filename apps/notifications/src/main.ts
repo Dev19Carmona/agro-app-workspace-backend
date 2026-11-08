@@ -8,10 +8,7 @@ async function bootstrap() {
     title: 'Notifications API',
     description:
       'Documentación y pruebas del servicio Notifications (Mini-Croper). Servicio independiente del monolito api.',
-    tags: [
-      { name: 'health', description: 'Estado del servicio y de MongoDB' },
-      { name: 'notifications', description: 'Avisos simulados a partir de eventos de dominio' },
-    ],
+    tags: [{ name: 'health', description: 'Estado del servicio y de MongoDB' }],
   });
   await app.listen(process.env.PORT ?? 3005);
 }

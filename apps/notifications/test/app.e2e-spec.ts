@@ -1,29 +1,28 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { App } from 'supertest/types.js';
 import { NotificationsModule } from './../src/notifications.module.js';
 
-describe('NotificationsController (e2e)', () => {
-  let app: INestApplication<App>;
+describe('Notifications (e2e)', () => {
+  let app: INestApplication;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
       imports: [NotificationsModule],
     }).compile();
-
-    app = moduleFixture.createNestApplication();
+    app = moduleRef.createNestApplication();
     await app.init();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    await app.close();
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('GET /health responde 200 con MongoDB arriba', async () => {
+    await request(app.getHttpServer()).get('/health').expect(200);
+  });
+
+  it('GET / ya no existe (se eliminó el hello world)', async () => {
+    await request(app.getHttpServer()).get('/').expect(404);
   });
 });
