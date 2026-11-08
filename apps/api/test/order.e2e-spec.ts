@@ -262,7 +262,9 @@ describe('order (e2e)', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [ApiModule],
     }).compile();
-    app = moduleRef.createNestApplication<NestExpressApplication>();
+    app = moduleRef.createNestApplication<NestExpressApplication>({
+      rawBody: true,
+    });
     app.set('trust proxy', true);
     applySecurity(app, { corsOrigins: [] });
     await app.init();

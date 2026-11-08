@@ -1,0 +1,15 @@
+## Prompt MVP ##
+
+/spec https://www.mongodb.com/es Quiero realizar un MVP de la aplicación
+  C:\Users\ASUS\Desktop\projects\agro-app-workspace Ese será el backend con el que nos vamos
+  a conectar a este frontend de ese backend vas a poder analizar toda la logica de negocio
+  y cada uno de los endpoints tammbien revisar las reglas de negocio para realizar cada una
+  de las rutas. La página de MongoDB te la envío con el fin de utilizar los mismos estilos y
+  la misma letra, la misma tipografía También vamos a utilizar el mismo estilo dark y light
+  que tiene MongoDB, es decir, los mismos colores cuando es dark y los mismos colores
+  cuando es light. Para los estilos vamos a usar Tailwind, que ya está configurado, y para
+  los componentes vamos a utilizar https://primeng.dev/ Debemos configurar PrimeNG.
+
+  ## ##
+
+  

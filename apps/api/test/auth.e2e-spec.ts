@@ -142,7 +142,9 @@ describe('auth y seguridad transversal (e2e)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [ApiModule] })
       .setLogger(new ConsoleLogger({ logLevels: ['log', 'warn', 'error'] }))
       .compile();
-    app = moduleRef.createNestApplication<NestExpressApplication>();
+    app = moduleRef.createNestApplication<NestExpressApplication>({
+      rawBody: true,
+    });
     app.set('trust proxy', true);
     applySecurity(app, { corsOrigins: [ALLOWED_ORIGIN] });
     setupSwagger(app, { title: 'e2e', description: 'e2e' });

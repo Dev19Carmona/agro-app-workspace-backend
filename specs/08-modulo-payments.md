@@ -1,6 +1,6 @@
 # SPEC 08 — Módulo Payments (pago simulado, idempotencia, webhook firmado y eventos)
 
-> **Status:** Aprobado
+> **Status:** Implementado
 > **Depends on:** SPEC 03, SPEC 04, SPEC 07
 > **Date:** 2026-11-07
 > **Objective:** Implementar el módulo `payments` del monolito `api` (`POST /payments` idempotente con monto tomado de `order`, simulador de pasarela, webhook firmado por HMAC, historial de intentos y eventos `payment.approved` y `payment.declined`).

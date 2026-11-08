@@ -1,6 +1,6 @@
 # SPEC 07 — Módulo Order (carrito, checkout, saga, outbox y expiración)
 
-> **Status:** Aprobado
+> **Status:** Implementado
 > **Depends on:** SPEC 03, SPEC 04, SPEC 06
 > **Date:** 2026-11-07
 > **Objective:** Implementar el módulo `order` del monolito `api` (carrito, checkout con precio tomado de `catalog`, división en `SubOrder`, saga de estados por eventos en memoria, outbox transaccional y expiración de pedidos).
