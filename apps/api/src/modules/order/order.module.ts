@@ -3,7 +3,9 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CatalogModule } from '../catalog/index.js';
 import { CartController } from './controllers/cart.controller.js';
+import { OrdersAdminController } from './controllers/orders-admin.controller.js';
 import { OrdersController } from './controllers/orders.controller.js';
+import { ProviderOrdersController } from './controllers/provider-orders.controller.js';
 import { CartItem, CartItemSchema } from './schemas/cart-item.schema.js';
 import { Cart, CartSchema } from './schemas/cart.schema.js';
 import { OrderItem, OrderItemSchema } from './schemas/order-item.schema.js';
@@ -40,8 +42,13 @@ import { OutboxService } from './services/outbox.service.js';
       { name: OrderProcessedEvent.name, schema: OrderProcessedEventSchema },
     ]),
   ],
-  // Las rutas fijas (`cart`, luego `provider` y `admin`) van antes de `:id`.
-  controllers: [CartController, OrdersController],
+  // Las rutas fijas (`cart`, `provider`, `admin`) van antes de `:id`.
+  controllers: [
+    CartController,
+    ProviderOrdersController,
+    OrdersAdminController,
+    OrdersController,
+  ],
   providers: [
     CartService,
     CheckoutService,
