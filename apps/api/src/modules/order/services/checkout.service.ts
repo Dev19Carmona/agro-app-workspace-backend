@@ -35,38 +35,8 @@ import {
   SubOrder,
   type SubOrderDocument,
 } from '../schemas/sub-order.schema.js';
+import { type OrderView, toOrderView } from './orders.service.js';
 import { OutboxService } from './outbox.service.js';
-
-export type OrderItemView = {
-  id: string;
-  variantId: string;
-  productId: string;
-  nombreProducto: string;
-  presentacion: string;
-  unidad: string;
-  precioUnitario: number;
-  cantidad: number;
-  subtotal: number;
-};
-
-export type SubOrderView = {
-  id: string;
-  storeId: string;
-  subtotal: number;
-  items: OrderItemView[];
-};
-
-/** Pedido con sus sub-pedidos e ítems (snapshot del checkout). */
-export type OrderView = {
-  id: string;
-  buyerId: string;
-  total: number;
-  moneda: 'COP';
-  status: OrderStatus;
-  expiresAt?: Date;
-  createdAt: Date;
-  subOrders: SubOrderView[];
-};
 
 export type CheckoutResult = {
   order: OrderView;
@@ -236,33 +206,7 @@ export class CheckoutService {
       this.subOrderModel.find({ orderId: id }).sort({ _id: 1 }).lean(),
       this.orderItemModel.find({ orderId: id }).sort({ _id: 1 }).lean(),
     ]);
-    return {
-      id: order._id.toString(),
-      buyerId: order.buyerId.toString(),
-      total: order.total,
-      moneda: order.moneda,
-      status: order.status,
-      ...(order.expiresAt && { expiresAt: order.expiresAt }),
-      createdAt: order.createdAt,
-      subOrders: subOrders.map((s) => ({
-        id: s._id.toString(),
-        storeId: s.storeId.toString(),
-        subtotal: s.subtotal,
-        items: items
-          .filter((i) => i.subOrderId.toString() === s._id.toString())
-          .map((i) => ({
-            id: i._id.toString(),
-            variantId: i.variantId.toString(),
-            productId: i.productId.toString(),
-            nombreProducto: i.nombreProducto,
-            presentacion: i.presentacion,
-            unidad: i.unidad,
-            precioUnitario: i.precioUnitario,
-            cantidad: i.cantidad,
-            subtotal: i.subtotal,
-          })),
-      })),
-    };
+    return toOrderView(order, subOrders, items);
   }
 
   private async inTransaction(

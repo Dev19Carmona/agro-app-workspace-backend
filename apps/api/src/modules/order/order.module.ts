@@ -19,7 +19,10 @@ import {
 import { SubOrder, SubOrderSchema } from './schemas/sub-order.schema.js';
 import { CartService } from './services/cart.service.js';
 import { CheckoutService } from './services/checkout.service.js';
+import { OrderExpirationService } from './services/order-expiration.service.js';
+import { OrderQueryService } from './services/order-query.service.js';
 import { OrderSagaService } from './services/order-saga.service.js';
+import { OrdersService } from './services/orders.service.js';
 import { OutboxPublisherService } from './services/outbox-publisher.service.js';
 import { OutboxService } from './services/outbox.service.js';
 
@@ -37,13 +40,18 @@ import { OutboxService } from './services/outbox.service.js';
       { name: OrderProcessedEvent.name, schema: OrderProcessedEventSchema },
     ]),
   ],
-  controllers: [OrdersController, CartController],
+  // Las rutas fijas (`cart`, luego `provider` y `admin`) van antes de `:id`.
+  controllers: [CartController, OrdersController],
   providers: [
     CartService,
     CheckoutService,
     OutboxService,
     OutboxPublisherService,
     OrderSagaService,
+    OrderExpirationService,
+    OrdersService,
+    OrderQueryService,
   ],
+  exports: [OrderQueryService],
 })
 export class OrderModule {}

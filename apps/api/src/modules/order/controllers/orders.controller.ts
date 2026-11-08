@@ -1,9 +1,12 @@
 import {
   BadRequestException,
   Controller,
+  Get,
   Headers,
   HttpStatus,
+  Param,
   Post,
+  Query,
   Res,
 } from '@nestjs/common';
 import {
@@ -21,11 +24,16 @@ import {
   type AuthenticatedUser,
   Role,
 } from '../../../../../../libs/common/src/security/roles.js';
+import { objectIdSchema } from '../dto/cart.dto.js';
 import { idempotencyKeySchema } from '../dto/checkout.dto.js';
+import { type OrdersQuery, ordersQuerySchema } from '../dto/order-query.dto.js';
+import type { Page } from '../policies/pagination.policy.js';
+import { CheckoutService } from '../services/checkout.service.js';
 import {
-  CheckoutService,
+  type OrderSummaryView,
   type OrderView,
-} from '../services/checkout.service.js';
+  OrdersService,
+} from '../services/orders.service.js';
 
 /** Checkout y pedidos del PRODUCTOR. */
 @ApiTags('orders')
@@ -33,7 +41,10 @@ import {
 @Roles(Role.PRODUCTOR)
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly checkout: CheckoutService) {}
+  constructor(
+    private readonly checkout: CheckoutService,
+    private readonly orders: OrdersService,
+  ) {}
 
   @Post('checkout')
   @ApiOperation({
@@ -55,5 +66,27 @@ export class OrdersController {
     const { order, created } = await this.checkout.checkout(user.id, key.data);
     res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
     return order;
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Pedidos del PRODUCTOR, del más reciente al más antiguo.',
+  })
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query({ schema: ordersQuerySchema }) query: OrdersQuery,
+  ): Promise<Page<OrderSummaryView>> {
+    return this.orders.listMine(user.id, query);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Pedido propio con sub-pedidos e ítems; ajeno: 404.',
+  })
+  get(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', { schema: objectIdSchema }) id: string,
+  ): Promise<OrderView> {
+    return this.orders.getMine(user.id, id);
   }
 }
