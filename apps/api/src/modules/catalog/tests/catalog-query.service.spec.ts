@@ -220,6 +220,96 @@ describe('CatalogQueryService (consulta pública)', () => {
     });
   });
 
+  describe('getCheckoutVariants', () => {
+    const variantId = oid();
+    const tienda = (extra: Record<string, unknown> = {}) => ({
+      _id: STORE_ID,
+      activa: true,
+      ...extra,
+    });
+
+    /** Prepara variante, producto y tienda como los devolvería Mongo. */
+    const preparar = (
+      v: Record<string, unknown> = {},
+      p: Record<string, unknown> = {},
+      s: Record<string, unknown> = {},
+    ) => {
+      variantFind.mockReturnValue(lean([variante({ _id: variantId, ...v })]));
+      productFind.mockReturnValue(lean([producto(p)]));
+      storeFind.mockReturnValue(lean([tienda(s)]));
+    };
+
+    it('devuelve la variante con el precio de oferta y apta', async () => {
+      preparar({ precioOferta: 800 });
+
+      const [item] = await service.getCheckoutVariants([variantId.toString()]);
+
+      expect(item).toEqual({
+        variantId: variantId.toString(),
+        productId: PRODUCT_ID.toString(),
+        storeId: STORE_ID.toString(),
+        nombreProducto: 'Herbicida',
+        presentacion: '4 L',
+        unidad: 'L',
+        precioVigente: 800,
+        disponible: 6,
+        apta: true,
+      });
+    });
+
+    it('usa el precio base cuando no hay oferta', async () => {
+      preparar();
+
+      const [item] = await service.getCheckoutVariants([variantId.toString()]);
+
+      expect(item.precioVigente).toBe(1000);
+    });
+
+    it('apta = false si el producto requiere cotización', async () => {
+      preparar({}, { requiresQuote: true });
+
+      const [item] = await service.getCheckoutVariants([variantId.toString()]);
+
+      expect(item.apta).toBe(false);
+    });
+
+    it.each([
+      ['variante inactiva', { activo: false }, {}, {}],
+      ['producto inactivo', {}, { activo: false }, {}],
+      ['tienda desactivada', {}, {}, { activa: false }],
+    ])('apta = false con %s', async (_caso, v, p, s) => {
+      preparar(v, p, s);
+
+      const [item] = await service.getCheckoutVariants([variantId.toString()]);
+
+      expect(item.apta).toBe(false);
+    });
+
+    it('una variante inexistente no aparece en el resultado', async () => {
+      variantFind.mockReturnValue(lean([]));
+      productFind.mockReturnValue(lean([]));
+      storeFind.mockReturnValue(lean([]));
+
+      const result = await service.getCheckoutVariants([oid().toString()]);
+
+      expect(result).toEqual([]);
+    });
+
+    it('ignora ids inválidos sin consultar Mongo y no repite ids', async () => {
+      expect(
+        await service.getCheckoutVariants(['abc', '{"$ne":null}']),
+      ).toEqual([]);
+      expect(variantFind).not.toHaveBeenCalled();
+
+      preparar();
+      const id = variantId.toString();
+      const result = await service.getCheckoutVariants([id, id]);
+
+      expect(variantFind).toHaveBeenCalledWith({ _id: { $in: [id] } });
+      expect(result).toHaveLength(1);
+    });
+  });
+
   describe('tiendas y categorías', () => {
     it('listStores solo trae tiendas activas y no expone ownerId ni nit', async () => {
       storeFind.mockReturnValue(

@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { type HydratedDocument, Types } from 'mongoose';
+import {
+  type HydratedDocument,
+  Schema as MongooseSchema,
+  type Types,
+} from 'mongoose';
 
 export const FICHA_MAX_ENTRADAS = 30;
 export const FICHA_MAX_CLAVE = 50;
@@ -21,10 +25,10 @@ function fichaValida(ficha: Record<string, unknown>): boolean {
 /** Colección `products`. */
 @Schema({ collection: 'products', timestamps: true, minimize: false })
 export class Product {
-  @Prop({ type: Types.ObjectId, required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
   storeId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
   categoryId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true })

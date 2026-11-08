@@ -2,7 +2,7 @@
 
 > **Documento vivo.** Es la fuente de verdad de las reglas de negocio del marketplace agropecuario Mini-Croper (multi-vendedor, con pago virtual simulado). Se edita directamente cuando una regla cambia; no hace falta un spec nuevo.
 >
-> **Última actualización:** 2026-11-07
+> **Última actualización:** 2026-11-08
 
 ## Cómo mantener este archivo
 
@@ -27,10 +27,11 @@ Los nombres se conservan tal cual deben usarse en el código.
 ```text
 Auth          User(id, email, passwordHash, nombre, documento, rol, status, storeId?, consent)
               RefreshToken(id, userId, familyId, tokenHash, expiresAt)
-Catálogo      Store(id, nombre, nit, ownerId, municipio)
-              Category
-              Product(id, storeId, categoryId, nombre, marca, fichaTécnica, requiresQuote)
-              ProductVariant(id, productId, presentación, unidad, precio, precioOferta?, stock, stockReservado)
+Catálogo      Store(id, nombre, nit, ownerId, municipio, activa)
+              Category(id, nombre, activa)
+              Product(id, storeId, categoryId, nombre, marca, fichaTécnica, requiresQuote, activo)
+              ProductVariant(id, productId, presentación, unidad, precio, precioOferta?, stock, stockReservado, activo)
+              StockReservation(orderId, status, items)
 Pedidos       Cart, CartItem
               Order(id, buyerId, total, status, expiresAt)
               SubOrder (una por tienda), OrderItem
@@ -61,7 +62,14 @@ Método de pago: CARD | PSE | NEQUI
 - Un producto con `requiresQuote = true` tiene "precio a cotizar" y **no entra al checkout**.
 - Una variante puede tener `precioOferta`; el precio vigente es el de oferta si existe.
 - Stock disponible = `stock` − `stockReservado`.
-- Consultar productos, tiendas y ofertas es público. Crear tiendas y productos y modificar stock requiere `PROVEEDOR`, y solo sobre su tienda.
+- Consultar productos, tiendas, ofertas y categorías es público. Crear tiendas y productos y modificar stock requiere `PROVEEDOR`, y solo sobre su tienda. `ADMIN` gestiona categorías y tiendas, pero no productos ni stock.
+- **Una tienda por `PROVEEDOR`.** Al crearla, `catalog` emite `store.created` y `auth` guarda el `storeId` en el usuario. El proveedor se autoriza por ser dueño de la tienda (`ownerId`), no por el `storeId` de su token, que solo se actualiza al renovar el refresh token.
+- Un `ADMIN` puede **desactivar** una tienda (`activa = false`): sale de la consulta pública y no admite productos nuevos. No se borra ni se reactiva, para no afectar pedidos históricos.
+- Productos y variantes tienen `activo` y no se borran: un pedido histórico puede referenciarlos. Lo inactivo no aparece en la consulta pública. Las categorías también tienen `activa`.
+- Una variante sin stock disponible se muestra con `disponible = 0`; no se oculta. La carrera entre la consulta y el checkout la cubre `stock.rejected`.
+- Los precios son enteros en COP, sin decimales. `precioOferta`, si existe, es menor que `precio`.
+- El `PROVEEDOR` fija el stock con un valor absoluto, y no puede dejarlo por debajo de `stockReservado`.
+- El nombre de una categoría es único, sin distinguir mayúsculas ni tildes.
 
 ## Pedidos
 
@@ -104,6 +112,15 @@ Método de pago: CARD | PSE | NEQUI
 4. Si el pedido vence sin pago aprobado, un job lo pasa a `CANCELLED` → `order.cancelled` → catálogo libera el stock (`stock.released`). Esta es la **compensación**.
 5. Notificaciones avisa al productor y a cada tienda del resultado.
 
+### Reservas de stock
+
+El catálogo guarda una `StockReservation` por pedido (`orderId` único) con estado `RESERVED`, `REJECTED`, `CONFIRMED` o `RELEASED`. Así libera solo lo que realmente reservó y procesa cada evento una sola vez.
+
+- La reserva es todo o nada: si algún ítem no alcanza, no queda ninguna reserva parcial. El motivo del rechazo es `INSUFFICIENT_STOCK`, o `VARIANT_UNAVAILABLE` si la variante no existe o no es apta (inactiva, de un producto inactivo o con `requiresQuote`, o de una tienda desactivada).
+- `order.confirmed`: si la reserva está `RESERVED`, resta la cantidad de `stock` y de `stockReservado` y la pasa a `CONFIRMED`.
+- `order.cancelled`: si la reserva está `RESERVED`, resta la cantidad de `stockReservado`, la pasa a `RELEASED` y emite `stock.released`. Si está `REJECTED`, `CONFIRMED`, `RELEASED` o no existe, no libera nada ni emite. Un pedido cancelado por `stock.rejected` nunca libera stock.
+- Un `order.created` repetido (mismo `eventId`) no reserva dos veces.
+
 ## Eventos
 
 Formato común (el `correlationId` es el id del pedido):
@@ -116,6 +133,7 @@ Formato común (el `correlationId` es el id del pedido):
 | --- | --- | --- |
 | `user.registered` | auth | notification |
 | `provider.approved` / `provider.rejected` | auth | notification |
+| `store.created` | catalog | auth |
 | `order.created` | order | catalog |
 | `stock.reserved` / `stock.rejected` | catalog | order |
 | `stock.released` | catalog | order |
@@ -168,3 +186,4 @@ Pagos reales, crédito, logística, búsqueda avanzada y cotizaciones. Si se abo
 | 2026-11-06 | Creación del archivo a partir de `specs/01-reglas-de-negocio.md` (solo reglas; sin plan, criterios ni arquitectura). | Las reglas van a cambiar durante el desarrollo y necesitan un documento vivo en lugar de un spec cerrado. |
 | 2026-11-06 | Nueva sección "Persistencia" (MongoDB, colecciones propias por módulo, transacciones). En la saga, la reserva de stock deja de describirse como un bloqueo de filas de base relacional y pasa a ser una actualización atómica condicional. El outbox se guarda en la colección `outbox_events`. | Se eligió MongoDB como base de datos (SPEC 02); las reglas asumían una base relacional. |
 | 2026-11-07 | Regla nueva: un `PROVEEDOR` no se registra solo, queda `PENDING_APPROVAL` y un `ADMIN` aprueba o rechaza su solicitud. Nuevos estados del usuario (`ACTIVE`, `PENDING_APPROVAL`, `REJECTED`, `DISABLED`) y sección "Cuentas y acceso". Se concretan: política de contraseña, `bcrypt` con costo 12, bloqueo de 15 min tras 5 fallos, rotación del refresh token con revocación de la sesión ante reuso y límites de peticiones por endpoint de `auth`. Nuevos eventos `provider.approved` y `provider.rejected`. | Implementación del módulo `auth` (SPEC 03). La aprobación de proveedores no estaba en las reglas originales y el resto afinaba reglas que solo daban un mínimo. |
+| 2026-11-08 | Reglas del catálogo: una tienda por `PROVEEDOR` con `storeId` asignado por el evento `store.created`; tienda desactivable por `ADMIN`; `activo` en producto, variante y categoría (sin `DELETE`); consulta pública sin lo inactivo y variantes sin stock visibles con `disponible = 0`; precios enteros en COP; stock manual absoluto sin bajar de `stockReservado`. Nueva subsección "Reservas de stock" con `StockReservation` y el efecto de `order.confirmed` y `order.cancelled` sobre el stock (un pedido cancelado por `stock.rejected` no libera nada). Nuevo evento `store.created`. | Implementación del módulo `catalog` (SPEC 06). Las reglas no decían qué libera `order.cancelled` tras un `stock.rejected` ni qué hace `order.confirmed` en el catálogo. |

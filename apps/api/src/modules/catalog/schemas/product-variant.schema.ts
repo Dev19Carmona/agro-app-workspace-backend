@@ -1,12 +1,16 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { type HydratedDocument, Types } from 'mongoose';
+import {
+  type HydratedDocument,
+  Schema as MongooseSchema,
+  type Types,
+} from 'mongoose';
 
 const esEntero = (n: number) => Number.isInteger(n);
 
 /** Colección `product_variants`. Precios enteros en COP. */
 @Schema({ collection: 'product_variants', timestamps: true })
 export class ProductVariant {
-  @Prop({ type: Types.ObjectId, required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
   productId: Types.ObjectId;
 
   /** p. ej. "4 L". */

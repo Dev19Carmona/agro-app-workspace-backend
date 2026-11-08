@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { type HydratedDocument, Types } from 'mongoose';
+import {
+  type HydratedDocument,
+  Schema as MongooseSchema,
+  type Types,
+} from 'mongoose';
 
 export enum ReservationStatus {
   RESERVED = 'RESERVED',
@@ -10,7 +14,7 @@ export enum ReservationStatus {
 
 @Schema({ _id: false })
 export class ReservationItem {
-  @Prop({ type: Types.ObjectId, required: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true })
   variantId: Types.ObjectId;
 
   @Prop({ type: Number, required: true, min: 1 })

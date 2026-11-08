@@ -21,6 +21,30 @@ const ReservationModel = model('ReservationSpec', StockReservationSchema);
 
 const oid = () => new Types.ObjectId();
 
+describe('referencias ObjectId', () => {
+  // Con `type: Types.ObjectId` Mongoose las trata como Mixed y guarda strings.
+  it.each([
+    [StoreSchema, 'ownerId'],
+    [ProductSchema, 'storeId'],
+    [ProductSchema, 'categoryId'],
+    [ProductVariantSchema, 'productId'],
+    [StockReservationSchema, 'items.0.variantId'],
+  ] as const)('%s.%s es un ObjectId, no Mixed', (schema, campo) => {
+    const tipo = campo.startsWith('items.')
+      ? (
+          schema.path('items') as unknown as { schema: typeof schema }
+        ).schema.path('variantId')
+      : schema.path(campo);
+    expect(tipo.instance).toBe('ObjectId');
+  });
+
+  it('castea un id en string a ObjectId al crear', () => {
+    const id = oid().toString();
+    const doc = new VariantModel({ productId: id });
+    expect(doc.productId).toBeInstanceOf(Types.ObjectId);
+  });
+});
+
 describe('StoreSchema', () => {
   it('tiene índice único en ownerId y compuesto activa+municipio', () => {
     expect(indices(StoreSchema)).toContainEqual([

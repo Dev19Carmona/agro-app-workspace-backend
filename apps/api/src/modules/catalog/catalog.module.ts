@@ -21,6 +21,7 @@ import { Store, StoreSchema } from './schemas/store.schema.js';
 import { CatalogQueryService } from './services/catalog-query.service.js';
 import { CategoriesService } from './services/categories.service.js';
 import { ProductsService } from './services/products.service.js';
+import { StockListenerService } from './services/stock-listener.service.js';
 import { StockService } from './services/stock.service.js';
 import { StoresService } from './services/stores.service.js';
 
@@ -46,6 +47,8 @@ import { StoresService } from './services/stores.service.js';
     CategoriesService,
     ProductsService,
     StockService,
+    StockListenerService,
   ],
+  exports: [CatalogQueryService],
 })
 export class CatalogModule {}

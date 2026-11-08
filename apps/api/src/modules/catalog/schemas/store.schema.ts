@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { type HydratedDocument, Types } from 'mongoose';
+import {
+  type HydratedDocument,
+  Schema as MongooseSchema,
+  type Types,
+} from 'mongoose';
 
 /** Colección `stores`. Una tienda por PROVEEDOR (índice único en `ownerId`). */
 @Schema({ collection: 'stores', timestamps: true })
@@ -11,7 +15,7 @@ export class Store {
   nit: string;
 
   /** User PROVEEDOR dueño de la tienda. */
-  @Prop({ type: Types.ObjectId, required: true, unique: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true, unique: true })
   ownerId: Types.ObjectId;
 
   @Prop({ type: String, required: true, trim: true })

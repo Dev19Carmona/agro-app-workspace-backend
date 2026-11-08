@@ -3,7 +3,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { type Model, type QueryFilter, type Types } from 'mongoose';
 import type { ProductsQuery, StoresQuery } from '../dto/catalog-query.dto.js';
 import { type Page, toPage } from '../policies/pagination.policy.js';
-import { disponible, precioVigente } from '../policies/pricing.policy.js';
+import {
+  disponible,
+  esApta,
+  precioVigente,
+} from '../policies/pricing.policy.js';
 import { Category, type CategoryDocument } from '../schemas/category.schema.js';
 import {
   ProductVariant,
@@ -37,6 +41,22 @@ export type PublicStoreView = {
 };
 
 export type PublicCategoryView = { id: string; nombre: string };
+
+/** Lo que `order` necesita de una variante en el checkout (el precio sale siempre del catálogo). */
+export type CheckoutVariant = {
+  variantId: string;
+  productId: string;
+  storeId: string;
+  nombreProducto: string;
+  presentacion: string;
+  unidad: string;
+  precioVigente: number;
+  disponible: number;
+  /** `false` si requiere cotización, está inactiva o su tienda está desactivada. */
+  apta: boolean;
+};
+
+const OBJECT_ID = /^[a-f\d]{24}$/i;
 
 type StoredVariant = Pick<
   ProductVariant,
@@ -81,6 +101,47 @@ export class CatalogQueryService {
     @InjectModel(ProductVariant.name)
     private readonly variantModel: Model<ProductVariantDocument>,
   ) {}
+
+  /**
+   * API pública para `order`. Una variante inexistente (o con un id que no es
+   * ObjectId) no aparece en el resultado: `order` debe tratar su ausencia o
+   * `apta = false` como error de checkout. Respeta el orden pedido, sin repetir.
+   */
+  async getCheckoutVariants(variantIds: string[]): Promise<CheckoutVariant[]> {
+    const ids = [...new Set(variantIds)].filter((id) => OBJECT_ID.test(id));
+    if (ids.length === 0) return [];
+
+    const variants = await this.variantModel.find({ _id: { $in: ids } }).lean();
+    const products = await this.productModel
+      .find({ _id: { $in: variants.map((v) => v.productId) } })
+      .lean();
+    const productById = new Map(products.map((p) => [p._id.toString(), p]));
+    const stores = await this.storeModel
+      .find({ _id: { $in: products.map((p) => p.storeId) } })
+      .lean();
+    const storeById = new Map(stores.map((s) => [s._id.toString(), s]));
+    const variantById = new Map(variants.map((v) => [v._id.toString(), v]));
+
+    const result: CheckoutVariant[] = [];
+    for (const id of ids) {
+      const variant = variantById.get(id.toLowerCase());
+      const product = variant && productById.get(variant.productId.toString());
+      const store = product && storeById.get(product.storeId.toString());
+      if (!variant || !product || !store) continue;
+      result.push({
+        variantId: variant._id.toString(),
+        productId: product._id.toString(),
+        storeId: store._id.toString(),
+        nombreProducto: product.nombre,
+        presentacion: variant.presentacion,
+        unidad: variant.unidad,
+        precioVigente: precioVigente(variant),
+        disponible: disponible(variant),
+        apta: esApta(variant, product, store),
+      });
+    }
+    return result;
+  }
 
   async listProducts(query: ProductsQuery): Promise<Page<ProductView>> {
     const filter = await this.productFilter(query);
