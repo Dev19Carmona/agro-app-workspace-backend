@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { CatalogModule } from '../catalog/index.js';
+import { CartController } from './controllers/cart.controller.js';
 import { OrderController } from './controllers/order.controller.js';
 import { CartItem, CartItemSchema } from './schemas/cart-item.schema.js';
 import { Cart, CartSchema } from './schemas/cart.schema.js';
@@ -14,10 +16,12 @@ import {
   OrderProcessedEventSchema,
 } from './schemas/processed-event.schema.js';
 import { SubOrder, SubOrderSchema } from './schemas/sub-order.schema.js';
+import { CartService } from './services/cart.service.js';
 import { OrderService } from './services/order.service.js';
 
 @Module({
   imports: [
+    CatalogModule,
     MongooseModule.forFeature([
       { name: Cart.name, schema: CartSchema },
       { name: CartItem.name, schema: CartItemSchema },
@@ -28,7 +32,7 @@ import { OrderService } from './services/order.service.js';
       { name: OrderProcessedEvent.name, schema: OrderProcessedEventSchema },
     ]),
   ],
-  controllers: [OrderController],
-  providers: [OrderService],
+  controllers: [OrderController, CartController],
+  providers: [OrderService, CartService],
 })
 export class OrderModule {}
