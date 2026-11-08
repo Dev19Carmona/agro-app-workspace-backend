@@ -1,6 +1,6 @@
 # SPEC 06 — Módulo Catalog (tiendas, productos, variantes y reserva de stock)
 
-> **Status:** Aprobado
+> **Status:** Implementado
 > **Depends on:** SPEC 03, SPEC 04
 > **Date:** 2026-11-07
 > **Objective:** Implementar el módulo `catalog` del monolito `api` (tiendas, categorías, productos, variantes, consulta pública, stock y su reserva, confirmación y liberación por eventos en memoria), incluyendo el listener de `auth` que guarda el `storeId` del PROVEEDOR.

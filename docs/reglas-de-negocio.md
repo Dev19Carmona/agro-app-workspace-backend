@@ -76,7 +76,15 @@ Método de pago: CARD | PSE | NEQUI
 - El precio **siempre** se toma del catálogo en el checkout, nunca del cliente.
 - Un pedido agrupa ítems de varias tiendas y se divide en un `SubOrder` por tienda.
 - Un pedido sin pago aprobado a los **15 minutos** de entrar en `AWAITING_PAYMENT` expira y pasa a `CANCELLED`.
-- El proveedor solo ve los sub-pedidos de su tienda una vez pagados.
+- El proveedor solo ve los sub-pedidos de su tienda una vez pagados (pedido `CONFIRMED`). Ve el sub-pedido con sus ítems, el `orderId`, el estado y la fecha, sin `buyerId`, sin el `total` ni las demás tiendas. Su tienda sale del `storeId` de su token; sin ese dato el listado sale vacío y el detalle da `404`.
+- El `PRODUCTOR` tiene **un carrito** (sin vencimiento) con máximo **50 líneas** y `cantidad` entera de 1 a 1000 por línea. El carrito solo guarda la variante y la cantidad; el precio, el nombre y la disponibilidad se leen del catálogo cada vez. No admite variantes inexistentes ni no aptas (inactivas, de tienda desactivada o con `requiresQuote`).
+- `POST /orders/checkout` exige el header `Idempotency-Key` (de 8 a 100 caracteres). Repetir la misma clave devuelve el mismo pedido y no crea otro `order.created`. El checkout no valida stock: lo hace el catálogo al recibir `order.created`.
+- El pedido guarda un **snapshot** de cada ítem (nombre, presentación, unidad y precio), que no cambia aunque el catálogo cambie después.
+- Un pedido `PENDING` al que el catálogo no responde (`stock.reserved` o `stock.rejected`) en **5 minutos** pasa a `CANCELLED` por un job.
+- **Pago tardío:** un `payment.approved` confirma el pedido mientras siga en `AWAITING_PAYMENT`, aunque su vencimiento ya haya pasado. Gana quien cambie primero el estado: el job de expiración solo cancela con una actualización condicional sobre el estado. Un `payment.approved` sobre un pedido en cualquier otro estado se ignora (el pedido no se reabre; no hay reembolsos) y queda en el log.
+- **Reserva tardía:** si el catálogo responde `stock.reserved` cuando el pedido ya está `CANCELLED`, `order` vuelve a emitir `order.cancelled` (con otro `eventId` y `motivo: LATE_RESERVATION`) para que el catálogo libere esa reserva.
+- `CONFIRMED` y `CANCELLED` son estados finales. No hay cancelación manual de pedidos, ni por el `PRODUCTOR` ni por el `ADMIN`.
+- El `ADMIN` ve todos los pedidos en solo lectura, con filtros por estado y comprador.
 
 ## Pagos
 
@@ -105,11 +113,12 @@ Método de pago: CARD | PSE | NEQUI
 1. `POST /orders/checkout` guarda el pedido en `PENDING` y emite `order.created`.
 2. El catálogo reserva stock por variante de forma transaccional, con una actualización atómica condicional: solo reserva si `stock − stockReservado` alcanza para la cantidad pedida.
    - Alcanza: emite `stock.reserved` y el pedido pasa a `AWAITING_PAYMENT` con vencimiento en 15 min.
-   - No alcanza: emite `stock.rejected` y el pedido pasa a `CANCELLED`.
+   - No alcanza: emite `stock.rejected` y el pedido pasa a `CANCELLED` (`STOCK_REJECTED`).
+   - Si el catálogo no responde en 5 minutos, el pedido pasa a `CANCELLED` (`STOCK_TIMEOUT`).
 3. El productor paga con `POST /payments`; pagos valida el monto con pedidos y simula la transacción.
-   - Aprobado: `payment.approved` → pedido `CONFIRMED` → `order.confirmed`.
+   - Aprobado: `payment.approved` → pedido `CONFIRMED` → `order.confirmed` (también si el pago llega después del vencimiento, mientras el pedido siga en `AWAITING_PAYMENT`).
    - Rechazado o con error: `payment.declined` → el pedido sigue en `AWAITING_PAYMENT`.
-4. Si el pedido vence sin pago aprobado, un job lo pasa a `CANCELLED` → `order.cancelled` → catálogo libera el stock (`stock.released`). Esta es la **compensación**.
+4. Si el pedido vence sin pago aprobado, un job lo pasa a `CANCELLED` → `order.cancelled` → catálogo libera el stock (`stock.released`). Esta es la **compensación**. `order` consume `stock.released` solo para marcarlo procesado y dejarlo en el log: no cambia ningún estado.
 5. Notificaciones avisa al productor y a cada tienda del resultado.
 
 ### Reservas de stock
@@ -136,15 +145,16 @@ Formato común (el `correlationId` es el id del pedido):
 | `store.created` | catalog | auth |
 | `order.created` | order | catalog |
 | `stock.reserved` / `stock.rejected` | catalog | order |
-| `stock.released` | catalog | order |
+| `stock.released` | catalog | order (solo lo registra) |
 | `payment.approved` / `payment.declined` | payment | order, notification |
 | `order.confirmed` / `order.cancelled` | order | catalog, notification |
 
 ### Garantías de entrega
 
-- **Outbox:** el evento se guarda en la colección `outbox_events` en la misma transacción que el cambio de estado, y un job periódico (cada 2 s) lo publica y lo marca enviado.
-- **Idempotencia de consumidores:** cada consumidor guarda los `eventId` procesados.
-- **Reintentos y DLQ:** *ack* manual; tras 3 fallos el mensaje va a una *dead-letter queue*.
+- **Outbox:** el evento se guarda en la colección `outbox_events` en la misma transacción que el cambio de estado, y un job periódico (cada 2 s) lo publica y lo marca enviado. `order` nunca emite `order.*` directamente: el outbox es su único camino de emisión.
+- **Estados del outbox:** `PENDING`, `PUBLISHED` y `FAILED`. Un fallo de publicación se reintenta con espera creciente (2 s × 2^intento, máximo 60 s) y tras **5 intentos** el evento queda en `FAILED` para revisión manual. Es entrega al menos una vez: si el proceso cae tras publicar y antes de marcar, el evento se publica de nuevo.
+- **Idempotencia de consumidores:** cada consumidor guarda los `eventId` procesados en su propia colección (`processed_events` en `catalog`, `order_processed_events` en `order`). Marcar el evento y aplicar su efecto ocurre en la misma transacción.
+- **Reintentos y DLQ:** *ack* manual; tras 3 fallos el mensaje va a una *dead-letter queue*. Depende del transporte hacia `notifications`, que aún no está decidido, así que todavía no se implementa. Mientras tanto rige el límite de 5 intentos del outbox.
 - **Trazabilidad:** el `correlationId` viaja en headers HTTP y en cada evento.
 
 ## Cuentas y acceso
@@ -187,3 +197,4 @@ Pagos reales, crédito, logística, búsqueda avanzada y cotizaciones. Si se abo
 | 2026-11-06 | Nueva sección "Persistencia" (MongoDB, colecciones propias por módulo, transacciones). En la saga, la reserva de stock deja de describirse como un bloqueo de filas de base relacional y pasa a ser una actualización atómica condicional. El outbox se guarda en la colección `outbox_events`. | Se eligió MongoDB como base de datos (SPEC 02); las reglas asumían una base relacional. |
 | 2026-11-07 | Regla nueva: un `PROVEEDOR` no se registra solo, queda `PENDING_APPROVAL` y un `ADMIN` aprueba o rechaza su solicitud. Nuevos estados del usuario (`ACTIVE`, `PENDING_APPROVAL`, `REJECTED`, `DISABLED`) y sección "Cuentas y acceso". Se concretan: política de contraseña, `bcrypt` con costo 12, bloqueo de 15 min tras 5 fallos, rotación del refresh token con revocación de la sesión ante reuso y límites de peticiones por endpoint de `auth`. Nuevos eventos `provider.approved` y `provider.rejected`. | Implementación del módulo `auth` (SPEC 03). La aprobación de proveedores no estaba en las reglas originales y el resto afinaba reglas que solo daban un mínimo. |
 | 2026-11-08 | Reglas del catálogo: una tienda por `PROVEEDOR` con `storeId` asignado por el evento `store.created`; tienda desactivable por `ADMIN`; `activo` en producto, variante y categoría (sin `DELETE`); consulta pública sin lo inactivo y variantes sin stock visibles con `disponible = 0`; precios enteros en COP; stock manual absoluto sin bajar de `stockReservado`. Nueva subsección "Reservas de stock" con `StockReservation` y el efecto de `order.confirmed` y `order.cancelled` sobre el stock (un pedido cancelado por `stock.rejected` no libera nada). Nuevo evento `store.created`. | Implementación del módulo `catalog` (SPEC 06). Las reglas no decían qué libera `order.cancelled` tras un `stock.rejected` ni qué hace `order.confirmed` en el catálogo. |
+| 2026-11-08 | Reglas de pedidos: carrito del `PRODUCTOR` (uno por usuario, máximo 50 líneas, cantidad de 1 a 1000, solo la variante y la cantidad); `Idempotency-Key` en el checkout; snapshot del ítem; vista del `PROVEEDOR` sin `buyerId` ni `total` y autorizada por el `storeId` del token; `ADMIN` solo lectura; sin cancelación manual. Saga: un `PENDING` sin respuesta del catálogo en 5 min se cancela (`STOCK_TIMEOUT`); **pago tardío** (`payment.approved` confirma mientras el estado sea `AWAITING_PAYMENT`, aunque haya vencido); **reserva tardía** (`stock.reserved` sobre un pedido `CANCELLED` re-emite `order.cancelled` con `LATE_RESERVATION`); `stock.released` solo se registra en `order`. Garantías de entrega: estados del outbox (`PENDING`, `PUBLISHED`, `FAILED`), 5 intentos con espera creciente, colección de idempotencia propia de cada módulo; la DLQ de 3 fallos depende del transporte y no se implementa todavía. | Implementación del módulo `order` (SPEC 07). Las reglas no decían qué hacer con un pago o una reserva que llegan después de cancelar el pedido, para qué consume `order` el evento `stock.released`, ni qué ocurre si el catálogo nunca responde; y la DLQ presupone un transporte que aún no existe. |
