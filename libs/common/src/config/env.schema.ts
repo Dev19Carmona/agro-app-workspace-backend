@@ -50,6 +50,7 @@ function rsaPem(kind: 'private' | 'public') {
 export const apiEnvSchema = envSchema.extend({
   JWT_PRIVATE_KEY: rsaPem('private'),
   JWT_PUBLIC_KEY: rsaPem('public'),
+  PAYMENTS_WEBHOOK_SECRET: z.string().min(32),
   CORS_ORIGINS: z.string().optional(),
   NODE_ENV: z.string().optional(),
 });

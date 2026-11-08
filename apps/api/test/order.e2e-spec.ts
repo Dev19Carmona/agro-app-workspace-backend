@@ -35,6 +35,7 @@ const keys = generateKeyPairSync('rsa', {
 });
 process.env.JWT_PRIVATE_KEY = keys.privateKey;
 process.env.JWT_PUBLIC_KEY = keys.publicKey;
+process.env.PAYMENTS_WEBHOOK_SECRET = 'e2e-webhook-secret-0123456789abcdef';
 process.env.CORS_ORIGINS = '';
 
 type Method = 'get' | 'post' | 'put' | 'patch' | 'delete';
