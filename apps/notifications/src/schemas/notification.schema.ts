@@ -58,6 +58,10 @@ export class Notification {
   @Prop({ type: Date, required: true })
   sentAt: Date;
 
+  /** Ausente = sin leer. */
+  @Prop({ type: Date, required: false })
+  readAt?: Date;
+
   createdAt: Date;
 }
 
@@ -72,4 +76,16 @@ NotificationSchema.index({
   destinatarioTipo: 1,
   destinatarioId: 1,
   createdAt: -1,
+});
+/** Listado por cursor (`_id` descendente) de la bandeja de un destinatario. */
+NotificationSchema.index({
+  destinatarioTipo: 1,
+  destinatarioId: 1,
+  _id: -1,
+});
+/** Contador de no leídos y `read-all`. */
+NotificationSchema.index({
+  destinatarioTipo: 1,
+  destinatarioId: 1,
+  readAt: 1,
 });

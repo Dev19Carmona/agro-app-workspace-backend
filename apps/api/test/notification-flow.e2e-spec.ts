@@ -9,6 +9,7 @@
 //   `e2e-*-<RUN>@test.co` y datos colgados de ellos, y los borra al terminar.
 // - El simulador espera de 1 a 3 s por cobro, así que las pruebas con cobro son lentas.
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
+import { createServer } from 'node:net';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -31,6 +32,20 @@ process.env.JWT_PRIVATE_KEY = keys.privateKey;
 process.env.JWT_PUBLIC_KEY = keys.publicKey;
 process.env.PAYMENTS_WEBHOOK_SECRET = 'e2e-webhook-secret-0123456789abcdef';
 process.env.CORS_ORIGINS = '';
+
+/** Un puerto libre: se reserva y se suelta. `notifications` escucha ahí para que `api` la lea. */
+const freePort = () =>
+  new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(port));
+    });
+  });
+
+const NOTIFICATIONS_PORT = await freePort();
+process.env.NOTIFICATIONS_INTERNAL_URL = `http://127.0.0.1:${NOTIFICATIONS_PORT}`;
 
 type Method = 'get' | 'post' | 'put' | 'delete';
 type Json = Record<string, any>;
@@ -230,7 +245,7 @@ describe('flujo de notificaciones (e2e)', () => {
       imports: [NotificationsModule],
     }).compile();
     notifications = notifRef.createNestApplication<NestExpressApplication>();
-    await notifications.init();
+    await notifications.listen(NOTIFICATIONS_PORT, '127.0.0.1');
 
     conn = api.get<Connection>(getConnectionToken());
     nconn = notifications.get<Connection>(getConnectionToken());
@@ -417,6 +432,58 @@ describe('flujo de notificaciones (e2e)', () => {
 
     // Ningún aviso lleva el correo de nadie.
     expect(JSON.stringify(todos)).not.toContain(`@test.co`);
+  });
+
+  it('el productor y cada proveedor leen sus avisos del pedido por GET /notifications', async () => {
+    const [orderId] = [...orderIds];
+    await esperarAvisos(orderId, 4);
+
+    const deProductor = await call('get', '/notifications', {
+      token: productor.token,
+    });
+    expect(deProductor.status).toBe(200);
+    const delPedido = deProductor.body.data.filter(
+      (a: Json) => a.orderId === orderId,
+    );
+    expect(
+      delPedido
+        .map((a: Json) => a.plantilla)
+        .sort((a: string, b: string) => a.localeCompare(b)),
+    ).toEqual(['ORDER_CONFIRMED_BUYER', 'PAYMENT_APPROVED']);
+    for (const aviso of deProductor.body.data) {
+      expect(aviso.destinatarioTipo).toBe('USER');
+      expect(aviso).not.toHaveProperty('eventId');
+      expect(aviso).not.toHaveProperty('correlationId');
+    }
+
+    for (const prov of [prov1, prov2]) {
+      const res = await call('get', '/notifications', { token: prov.token });
+      expect(res.status).toBe(200);
+      const deTienda = res.body.data.filter(
+        (a: Json) => a.plantilla === 'ORDER_CONFIRMED_STORE',
+      );
+      expect(deTienda).toHaveLength(1);
+      expect(deTienda[0]).toMatchObject({
+        destinatarioTipo: 'STORE',
+        orderId,
+        readAt: null,
+      });
+    }
+
+    // unread-count del productor baja a 0 tras read-all.
+    const antes = await call('get', '/notifications/unread-count', {
+      token: productor.token,
+    });
+    expect(antes.body.count).toBeGreaterThanOrEqual(3);
+    const readAll = await call('post', '/notifications/read-all', {
+      token: productor.token,
+    });
+    expect(readAll.status).toBe(200);
+    expect(readAll.body.updated).toBe(antes.body.count);
+    const despues = await call('get', '/notifications/unread-count', {
+      token: productor.token,
+    });
+    expect(despues.body).toEqual({ count: 0 });
   });
 
   it('el puente deja los eventos del pedido en PUBLISHED, con el eventId del origen', async () => {
