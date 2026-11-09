@@ -29,7 +29,7 @@ class FakeAuthGuard implements CanActivate {
 }
 
 describe('CatalogAdminController (HTTP con pipe y RolesGuard reales)', () => {
-  const categories = { create: vi.fn(), update: vi.fn() };
+  const categories = { create: vi.fn(), update: vi.fn(), listAdmin: vi.fn() };
   const stores = {
     listAdmin: vi.fn(),
     findOneAdmin: vi.fn(),
@@ -57,6 +57,30 @@ describe('CatalogAdminController (HTTP con pipe y RolesGuard reales)', () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  describe('GET /catalog/admin/categories', () => {
+    it('lista las categorías con activa y responde 200', async () => {
+      const lista = [
+        { id: ID, nombre: 'Semillas', activa: true },
+        { id: ADMIN_ID, nombre: 'Abonos', activa: false },
+      ];
+      categories.listAdmin.mockResolvedValue(lista);
+
+      const res = await http().get('/catalog/admin/categories');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(lista);
+    });
+
+    it.each(['PROVEEDOR', 'PRODUCTOR'])('responde 403 a %s', async (rol) => {
+      const res = await http()
+        .get('/catalog/admin/categories')
+        .set('x-test-rol', rol);
+
+      expect(res.status).toBe(403);
+      expect(categories.listAdmin).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST /catalog/categories', () => {

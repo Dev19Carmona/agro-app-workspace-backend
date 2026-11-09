@@ -42,6 +42,14 @@ export class CatalogAdminController {
     private readonly stores: StoresService,
   ) {}
 
+  @Get('admin/categories')
+  @ApiOperation({
+    summary: 'Lista todas las categorías, desactivadas incluidas.',
+  })
+  listCategories(): Promise<CategoryView[]> {
+    return this.categories.listAdmin();
+  }
+
   @Post('categories')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Crea una categoría.' })
