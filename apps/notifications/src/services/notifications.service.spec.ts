@@ -61,6 +61,54 @@ describe('NotificationsService.handle', () => {
     expect(log).not.toHaveBeenCalled();
   });
 
+  describe('order.confirmed (varios avisos)', () => {
+    const BUYER = '64b7f0c2a1b2c3d4e5f60719';
+    const STORE_A = '64b7f0c2a1b2c3d4e5f6071b';
+    const STORE_B = '64b7f0c2a1b2c3d4e5f6071c';
+    const confirmado = (): WireEvent => ({
+      eventId: '3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f',
+      type: 'order.confirmed',
+      occurredAt: '2026-11-09T10:00:00.000Z',
+      correlationId: USER_ID,
+      payload: {
+        orderId: USER_ID,
+        buyerId: BUYER,
+        total: 5000,
+        storeIds: [STORE_A, STORE_B],
+      },
+    });
+
+    it('guarda un aviso para el comprador y uno por tienda', async () => {
+      await service.handle(confirmado());
+
+      const docs = model.create.mock.calls.map(([d]) => d);
+      expect(docs.map((d) => [d.destinatarioTipo, d.destinatarioId])).toEqual([
+        ['USER', BUYER],
+        ['STORE', STORE_A],
+        ['STORE', STORE_B],
+      ]);
+      expect(new Set(docs.map((d) => d.eventId)).size).toBe(1);
+    });
+
+    it('un reintento con un aviso ya guardado crea los demás sin duplicar', async () => {
+      model.create
+        .mockRejectedValueOnce({ code: 11000 }) // comprador ya guardado
+        .mockResolvedValue({});
+
+      await expect(service.handle(confirmado())).resolves.toBeUndefined();
+
+      expect(model.create).toHaveBeenCalledTimes(3);
+      expect(log).toHaveBeenCalledTimes(2); // solo loguea los nuevos
+    });
+
+    it('si falla uno con otro error, relanza (el consumidor reintenta)', async () => {
+      const error = new Error('mongo caído');
+      model.create.mockResolvedValueOnce({}).mockRejectedValueOnce(error);
+
+      await expect(service.handle(confirmado())).rejects.toBe(error);
+    });
+  });
+
   it('relanza cualquier otro error de Mongo', async () => {
     const error = new Error('mongo caído');
     model.create.mockRejectedValue(error);
@@ -77,7 +125,7 @@ describe('NotificationsService.handle', () => {
 
   it('lanza si el tipo no tiene plantilla', async () => {
     await expect(
-      service.handle({ ...event(), type: 'order.confirmed' }),
+      service.handle({ ...event(), type: 'order.created' }),
     ).rejects.toThrow(/Sin plantilla/);
   });
 });

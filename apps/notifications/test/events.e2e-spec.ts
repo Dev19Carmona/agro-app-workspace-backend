@@ -176,4 +176,171 @@ describe('notifications consumer (e2e)', () => {
     expect(handle).toHaveBeenCalledTimes(3);
     expect(await notificationsOf(event.eventId)).toHaveLength(0);
   });
+
+  describe('SPEC 10: los seis eventos restantes', () => {
+    const oid = () => {
+      const id = new Types.ObjectId();
+      userIds.push(id); // se borran en afterAll junto a los demás avisos
+      return id.toString();
+    };
+    const evento = (type: string, payload: Record<string, unknown>) => ({
+      eventId: randomUUID(),
+      type,
+      occurredAt: new Date().toISOString(),
+      correlationId: String(payload.orderId ?? payload.userId),
+      payload,
+    });
+    const esperar = (eventId: string, cantidad: number) =>
+      until(async () => {
+        const docs = await notificationsOf(eventId);
+        return docs.length >= cantidad ? docs : undefined;
+      });
+
+    it('user.registered deja el aviso de bienvenida', async () => {
+      const userId = oid();
+      const event = evento('user.registered', {
+        userId,
+        rol: 'PRODUCTOR',
+        status: 'ACTIVE',
+      });
+      publish(event, event.type);
+
+      const [doc] = await esperar(event.eventId, 1);
+
+      expect(doc).toMatchObject({
+        eventType: 'user.registered',
+        destinatarioTipo: 'USER',
+        plantilla: 'USER_REGISTERED',
+        canal: 'SIMULATED',
+      });
+      expect(doc.destinatarioId.toString()).toBe(userId);
+    });
+
+    it('provider.rejected deja el aviso con el motivo', async () => {
+      const event = evento('provider.rejected', {
+        userId: oid(),
+        reviewedBy: oid(),
+        reason: 'Falta el RUT',
+      });
+      publish(event, event.type);
+
+      const [doc] = await esperar(event.eventId, 1);
+
+      expect(doc).toMatchObject({ plantilla: 'PROVIDER_REJECTED' });
+      expect(doc.mensaje).toContain('Falta el RUT');
+    });
+
+    it('payment.approved y payment.declined avisan al comprador', async () => {
+      const buyerId = oid();
+      const orderId = oid();
+      const aprobado = evento('payment.approved', {
+        orderId,
+        paymentId: oid(),
+        buyerId,
+        monto: 90000,
+      });
+      const rechazado = evento('payment.declined', {
+        orderId,
+        paymentId: oid(),
+        buyerId,
+      });
+      publish(aprobado, aprobado.type);
+      publish(rechazado, rechazado.type);
+
+      const [ok] = await esperar(aprobado.eventId, 1);
+      const [no] = await esperar(rechazado.eventId, 1);
+
+      expect(ok).toMatchObject({ plantilla: 'PAYMENT_APPROVED' });
+      expect(ok.mensaje).toContain('$90.000');
+      expect(no).toMatchObject({ plantilla: 'PAYMENT_DECLINED' });
+      expect(ok.destinatarioId.toString()).toBe(buyerId);
+      expect(no.destinatarioId.toString()).toBe(buyerId);
+    });
+
+    it('order.confirmed de dos tiendas deja tres avisos: comprador y una por tienda', async () => {
+      const buyerId = oid();
+      const [storeA, storeB] = [oid(), oid()];
+      const event = evento('order.confirmed', {
+        orderId: oid(),
+        buyerId,
+        total: 120000,
+        storeIds: [storeA, storeB],
+      });
+      publish(event, event.type);
+
+      const docs = await esperar(event.eventId, 3);
+      await wait(500);
+
+      const todos = await notificationsOf(event.eventId);
+      expect(todos).toHaveLength(3);
+      expect(
+        docs
+          .map((d) => `${d.destinatarioTipo}:${d.plantilla}`)
+          .sort((a, b) => a.localeCompare(b)),
+      ).toEqual([
+        'STORE:ORDER_CONFIRMED_STORE',
+        'STORE:ORDER_CONFIRMED_STORE',
+        'USER:ORDER_CONFIRMED_BUYER',
+      ]);
+      expect(
+        todos
+          .filter((d) => d.destinatarioTipo === 'STORE')
+          .map((d) => d.destinatarioId.toString())
+          .sort((a, b) => a.localeCompare(b)),
+      ).toEqual([storeA, storeB].sort((a, b) => a.localeCompare(b)));
+    });
+
+    it('order.confirmed repetido no duplica ninguno de los tres avisos', async () => {
+      const event = evento('order.confirmed', {
+        orderId: oid(),
+        buyerId: oid(),
+        total: 5000,
+        storeIds: [oid(), oid()],
+      });
+      publish(event, event.type);
+      publish(event, event.type);
+      const handle = vi.spyOn(service, 'handle');
+
+      await until(() => handle.mock.calls.length >= 2);
+      await wait(500);
+
+      expect(await notificationsOf(event.eventId)).toHaveLength(3);
+    });
+
+    it('order.cancelled avisa solo al comprador', async () => {
+      const event = evento('order.cancelled', {
+        orderId: oid(),
+        buyerId: oid(),
+        motivo: 'EXPIRED',
+      });
+      publish(event, event.type);
+
+      await esperar(event.eventId, 1);
+      await wait(300);
+
+      const docs = await notificationsOf(event.eventId);
+      expect(docs).toHaveLength(1);
+      expect(docs[0]).toMatchObject({
+        destinatarioTipo: 'USER',
+        plantilla: 'ORDER_CANCELLED',
+      });
+    });
+
+    it('order.cancelled con un motivo desconocido llega a la DLQ tras 3 entregas', async () => {
+      const handle = vi.spyOn(service, 'handle');
+      const event = evento('order.cancelled', {
+        orderId: oid(),
+        buyerId: oid(),
+        motivo: 'NO_EXISTE',
+      });
+      publish(event, event.type);
+
+      const dead = await fromDlq();
+
+      expect(JSON.parse(dead.content.toString()).eventId).toBe(event.eventId);
+      await wait(1_000);
+      expect(handle).toHaveBeenCalledTimes(3);
+      expect(await notificationsOf(event.eventId)).toHaveLength(0);
+    });
+  });
 });

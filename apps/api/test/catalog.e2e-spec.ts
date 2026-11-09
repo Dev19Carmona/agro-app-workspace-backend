@@ -286,6 +286,9 @@ describe('catalog (e2e)', () => {
     await conn
       .collection('refresh_tokens')
       .deleteMany({ userId: { $in: userIds } });
+    await conn
+      .collection('notification_outbox')
+      .deleteMany({ correlationId: { $in: userIds.map(String) } });
     await conn.collection('users').deleteMany({ _id: { $in: userIds } });
     await app.close();
   });

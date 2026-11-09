@@ -1,9 +1,7 @@
 import type { WireEvent } from '../../../../libs/common/src/messaging/domain-event.schema.js';
 import { getTemplate } from './notification-templates.js';
-import {
-  InvalidEventPayloadError,
-  providerApprovedTemplate,
-} from './provider-approved.template.js';
+import { InvalidEventPayloadError } from './payload.js';
+import { providerApprovedTemplate } from './provider-approved.template.js';
 
 const USER_ID = '64b7f0c2a1b2c3d4e5f60718';
 
@@ -52,7 +50,7 @@ describe('getTemplate', () => {
   });
 
   it('devuelve undefined para un tipo sin plantilla o heredado de Object', () => {
-    expect(getTemplate('order.confirmed')).toBeUndefined();
+    expect(getTemplate('order.created')).toBeUndefined();
     expect(getTemplate('constructor')).toBeUndefined();
   });
 });

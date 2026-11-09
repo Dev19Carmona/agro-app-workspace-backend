@@ -66,3 +66,67 @@ describe('BridgeListenerService.onProviderApproved', () => {
     expect(logged).not.toContain('u1');
   });
 });
+
+describe('BridgeListenerService (user.registered y provider.rejected)', () => {
+  const outboxModel = { create: vi.fn() };
+  let service: BridgeListenerService;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    outboxModel.create.mockResolvedValue({});
+    service = new BridgeListenerService(outboxModel as never);
+  });
+
+  it('user.registered: eventId nuevo, correlationId = userId y sin email', async () => {
+    await service.onUserRegistered({
+      userId: 'u1',
+      email: 'a@b.co',
+      rol: 'PROVEEDOR',
+      status: 'PENDING_APPROVAL',
+    } as never);
+
+    const [doc] = outboxModel.create.mock.calls[0];
+    expect(doc.eventId).toMatch(UUID_V4);
+    expect(doc).toMatchObject({
+      type: 'user.registered',
+      correlationId: 'u1',
+      payload: { userId: 'u1', rol: 'PROVEEDOR', status: 'PENDING_APPROVAL' },
+    });
+    expect(JSON.stringify(doc)).not.toContain('a@b.co');
+  });
+
+  it('provider.rejected: conserva reason y descarta email', async () => {
+    await service.onProviderRejected({
+      userId: 'u1',
+      email: 'a@b.co',
+      reviewedBy: 'adm',
+      reason: 'Falta RUT',
+    });
+
+    const [doc] = outboxModel.create.mock.calls[0];
+    expect(doc.payload).toEqual({
+      userId: 'u1',
+      reviewedBy: 'adm',
+      reason: 'Falta RUT',
+    });
+  });
+
+  it('ignora el 11000 y relanza otros errores', async () => {
+    outboxModel.create.mockRejectedValueOnce({ code: 11000 });
+    await expect(
+      service.onProviderRejected({ userId: 'u1', email: 'x', reviewedBy: 'a' }),
+    ).resolves.toBeUndefined();
+
+    const error = new Error('boom');
+    outboxModel.create.mockRejectedValueOnce(error);
+    vi.spyOn(service['logger'], 'error').mockImplementation(() => {});
+    await expect(
+      service.onUserRegistered({
+        userId: 'u1',
+        email: 'x',
+        rol: 'PRODUCTOR',
+        status: 'ACTIVE',
+      } as never),
+    ).rejects.toBe(error);
+  });
+});

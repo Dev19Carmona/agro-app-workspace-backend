@@ -7,7 +7,15 @@ export const NOTIFICATIONS_DLQ = 'notifications.events.dlq';
 export const NOTIFICATIONS_DELIVERY_LIMIT = 2;
 
 /** Routing keys a las que se enlaza la cola de notificaciones. El SPEC 10 añade las demás. */
-export const NOTIFIABLE_EVENTS: readonly string[] = ['provider.approved'];
+export const NOTIFIABLE_EVENTS: readonly string[] = [
+  'user.registered',
+  'provider.approved',
+  'provider.rejected',
+  'payment.approved',
+  'payment.declined',
+  'order.confirmed',
+  'order.cancelled',
+];
 
 /** Parte del canal de `amqplib` que usa `declareTopology` (permite simularlo en los specs). */
 export interface TopologyChannel {

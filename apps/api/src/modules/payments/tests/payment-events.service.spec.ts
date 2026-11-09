@@ -8,10 +8,12 @@ import {
 const FINALIZED = new Date('2026-11-08T12:00:00.000Z');
 const orderId = new Types.ObjectId();
 const paymentId = new Types.ObjectId();
+const buyerId = new Types.ObjectId();
 
 const pago = (extra: Partial<EmittablePayment> = {}): EmittablePayment => ({
   _id: paymentId,
   orderId,
+  buyerId,
   monto: 50000,
   status: 'APPROVED',
   eventId: '3f2b8c1e-6a4d-4f0a-9b7e-1c2d3e4f5a6b',
@@ -47,6 +49,7 @@ describe('PaymentEventsService', () => {
       payload: {
         orderId: String(orderId),
         paymentId: String(paymentId),
+        buyerId: String(buyerId),
         monto: 50000,
       },
     });
@@ -64,6 +67,7 @@ describe('PaymentEventsService', () => {
         payload: {
           orderId: String(orderId),
           paymentId: String(paymentId),
+          buyerId: String(buyerId),
           motivo: 'INSUFFICIENT_FUNDS',
         },
       }),
@@ -71,7 +75,9 @@ describe('PaymentEventsService', () => {
   });
 
   it('ERROR también emite payment.declined', async () => {
-    await service.emit(pago({ status: 'ERROR', motivoRechazo: 'GATEWAY_ERROR' }));
+    await service.emit(
+      pago({ status: 'ERROR', motivoRechazo: 'GATEWAY_ERROR' }),
+    );
     expect(events.emitAsync).toHaveBeenCalledWith(
       'payment.declined',
       expect.objectContaining({
@@ -128,7 +134,9 @@ describe('PaymentEventsService', () => {
   );
 
   it('un pago sin eventId no emite nada', async () => {
-    await expect(service.emit(pago({ eventId: undefined }))).resolves.toBe(false);
+    await expect(service.emit(pago({ eventId: undefined }))).resolves.toBe(
+      false,
+    );
     expect(events.emitAsync).not.toHaveBeenCalled();
   });
 

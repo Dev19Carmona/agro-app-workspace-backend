@@ -30,6 +30,7 @@ export const UNKNOWN_DECLINE_REASON = 'UNKNOWN';
 export type EmittablePayment = {
   _id: Types.ObjectId;
   orderId: Types.ObjectId;
+  buyerId: Types.ObjectId;
   monto: number;
   status: string;
   motivoRechazo?: string;
@@ -145,17 +146,19 @@ export class PaymentEventsService {
     if (!payment.eventId) return null;
     const orderId = String(payment.orderId);
     const paymentId = String(payment._id);
+    const buyerId = String(payment.buyerId);
 
     let type: string;
     let payload: PaymentApprovedPayload | PaymentDeclinedPayload;
     if (payment.status === 'APPROVED') {
       type = PaymentEvents.PaymentApproved;
-      payload = { orderId, paymentId, monto: payment.monto };
+      payload = { orderId, paymentId, buyerId, monto: payment.monto };
     } else if (payment.status === 'DECLINED' || payment.status === 'ERROR') {
       type = PaymentEvents.PaymentDeclined;
       payload = {
         orderId,
         paymentId,
+        buyerId,
         motivo: payment.motivoRechazo ?? UNKNOWN_DECLINE_REASON,
       };
     } else {

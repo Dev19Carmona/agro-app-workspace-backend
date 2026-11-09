@@ -176,6 +176,9 @@ describe('auth y seguridad transversal (e2e)', () => {
     await conn
       .collection('refresh_tokens')
       .deleteMany({ userId: { $in: ids } });
+    await conn
+      .collection('notification_outbox')
+      .deleteMany({ correlationId: { $in: ids.map(String) } });
     await conn.collection('users').deleteMany({ _id: { $in: ids } });
     await app.close();
   });

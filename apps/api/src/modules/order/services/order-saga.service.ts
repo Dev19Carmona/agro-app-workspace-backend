@@ -24,6 +24,10 @@ import {
   OrderStatus,
 } from '../schemas/order.schema.js';
 import {
+  SubOrder,
+  type SubOrderDocument,
+} from '../schemas/sub-order.schema.js';
+import {
   OrderProcessedEvent,
   type OrderProcessedEventDocument,
 } from '../schemas/processed-event.schema.js';
@@ -56,6 +60,8 @@ export class OrderSagaService {
     @InjectModel(OrderProcessedEvent.name)
     private readonly processedModel: Model<OrderProcessedEventDocument>,
     private readonly outbox: OutboxService,
+    @InjectModel(SubOrder.name)
+    private readonly subOrderModel: Model<SubOrderDocument>,
   ) {}
 
   /**
@@ -152,6 +158,16 @@ export class OrderSagaService {
         );
         return;
       }
+      // Las tiendas se leen en la misma transacción: sin ellas no se confirma el pedido.
+      const subOrders = await this.subOrderModel
+        .find({ orderId: order._id })
+        .select('storeId')
+        .session(session)
+        .lean();
+      const storeIds = [...new Set(subOrders.map((s) => String(s.storeId)))];
+      if (storeIds.length === 0) {
+        throw new Error(`El pedido ${String(order._id)} no tiene sub-pedidos`);
+      }
       await this.outbox.add(
         session,
         OrderEvents.OrderConfirmed,
@@ -160,6 +176,7 @@ export class OrderSagaService {
           orderId: String(order._id),
           buyerId: String(order.buyerId),
           total: order.total,
+          storeIds,
         },
       );
     });

@@ -5,7 +5,13 @@
  */
 
 const ALLOWED_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  'user.registered': ['userId', 'rol', 'status'],
   'provider.approved': ['userId', 'reviewedBy'],
+  'provider.rejected': ['userId', 'reviewedBy', 'reason'],
+  'payment.approved': ['orderId', 'paymentId', 'buyerId', 'monto'],
+  'payment.declined': ['orderId', 'paymentId', 'buyerId'],
+  'order.confirmed': ['orderId', 'buyerId', 'total', 'storeIds'],
+  'order.cancelled': ['orderId', 'buyerId', 'motivo'],
 };
 
 export class UnsupportedEventTypeError extends Error {

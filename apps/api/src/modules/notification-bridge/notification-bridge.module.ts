@@ -8,6 +8,7 @@ import {
   NotificationOutboxEvent,
   NotificationOutboxEventSchema,
 } from './schemas/notification-outbox.schema.js';
+import { BridgeEnvelopeListenerService } from './services/bridge-envelope-listener.service.js';
 import { BridgeListenerService } from './services/bridge-listener.service.js';
 import { BridgePublisherService } from './services/bridge-publisher.service.js';
 import { EVENT_PUBLISHER } from './services/event-publisher.js';
@@ -26,6 +27,7 @@ import { RabbitMqEventPublisher } from './services/rabbitmq-event-publisher.serv
   ],
   providers: [
     BridgeListenerService,
+    BridgeEnvelopeListenerService,
     BridgePublisherService,
     {
       provide: RabbitMqConnection,
