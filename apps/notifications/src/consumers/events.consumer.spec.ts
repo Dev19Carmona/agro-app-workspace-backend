@@ -123,13 +123,13 @@ describe('EventsConsumer', () => {
   });
 
   it('un evento sin plantilla se confirma con warn y no se procesa', async () => {
-    const msg = message(wire({ type: 'order.confirmed' }));
+    const msg = message(wire({ type: 'order.created' }));
 
     await consumer.handleMessage(channel as never, msg);
 
     expect(channel.ack).toHaveBeenCalledWith(msg);
     expect(notifications.handle).not.toHaveBeenCalled();
-    expect(JSON.stringify(warn.mock.calls)).toContain('order.confirmed');
+    expect(JSON.stringify(warn.mock.calls)).toContain('order.created');
   });
 
   it('si el canal está cerrado, ack no rompe el consumidor', async () => {

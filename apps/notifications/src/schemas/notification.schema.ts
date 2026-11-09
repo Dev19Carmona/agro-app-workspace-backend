@@ -8,8 +8,16 @@ import {
 export const DESTINATARIO_TIPOS = ['USER', 'STORE'] as const;
 export type DestinatarioTipo = (typeof DESTINATARIO_TIPOS)[number];
 
-/** El SPEC 10 amplía la lista. */
-export const PLANTILLAS = ['PROVIDER_APPROVED'] as const;
+export const PLANTILLAS = [
+  'USER_REGISTERED',
+  'PROVIDER_APPROVED',
+  'PROVIDER_REJECTED',
+  'PAYMENT_APPROVED',
+  'PAYMENT_DECLINED',
+  'ORDER_CONFIRMED_BUYER',
+  'ORDER_CONFIRMED_STORE',
+  'ORDER_CANCELLED',
+] as const;
 export type Plantilla = (typeof PLANTILLAS)[number];
 
 /** Colección `notifications`: un aviso simulado por evento y destinatario. */

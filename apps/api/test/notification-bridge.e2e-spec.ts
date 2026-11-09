@@ -20,8 +20,10 @@ import { buildAdminDocument } from '../../../scripts/seed-admin.ts';
 import { RabbitMqConnection } from '../../../libs/common/src/messaging/rabbitmq-connection.js';
 import {
   EVENTS_EXCHANGE,
+  NOTIFIABLE_EVENTS,
   NOTIFICATIONS_QUEUE,
 } from '../../../libs/common/src/messaging/topology.js';
+import { BridgeEnvelopeListenerService } from '../src/modules/notification-bridge/services/bridge-envelope-listener.service.js';
 
 const PASSWORD = 'Segura12345';
 const RUN = randomUUID().slice(0, 8);
@@ -64,6 +66,7 @@ describe('notification-bridge (e2e)', () => {
   let adminToken: string;
   let adminId: string;
   const userIds: string[] = [];
+  const orderIds: string[] = [];
 
   let ipCounter = 0;
   const nextIp = () => `10.30.0.${++ipCounter}`;
@@ -103,15 +106,26 @@ describe('notification-bridge (e2e)', () => {
   }
 
   const outboxOf = (userId: string) =>
-    conn.collection('notification_outbox').findOne({ correlationId: userId });
+    conn
+      .collection('notification_outbox')
+      .findOne({ correlationId: userId, type: 'provider.approved' });
 
-  /** Lee de la cola de prueba hasta encontrar el mensaje de este usuario. */
-  const messageFor = (userId: string) =>
+  /** Lee de la cola de prueba hasta encontrar el mensaje de este `correlationId` y tipo. */
+  const messageFor = (correlationId: string, type = 'provider.approved') =>
     until(async () => {
       const msg = await probe.getChannel().get(probeQueue, { noAck: true });
       if (!msg) return undefined;
-      return msg.properties.correlationId === userId ? msg : undefined;
+      return msg.properties.correlationId === correlationId &&
+        msg.properties.type === type
+        ? msg
+        : undefined;
     });
+
+  const body = (msg: { content: Buffer }) =>
+    JSON.parse(msg.content.toString('utf8')) as Json;
+
+  const outboxByType = (correlationId: string, type: string) =>
+    conn.collection('notification_outbox').findOne({ correlationId, type });
 
   beforeAll(async () => {
     const { ApiModule } = await import('../src/api.module.js');
@@ -139,7 +153,9 @@ describe('notification-bridge (e2e)', () => {
     const ch = probe.getChannel();
     const q = await ch.assertQueue('', { exclusive: true, autoDelete: true });
     probeQueue = q.queue;
-    await ch.bindQueue(probeQueue, EVENTS_EXCHANGE, 'provider.approved');
+    for (const type of NOTIFIABLE_EVENTS) {
+      await ch.bindQueue(probeQueue, EVENTS_EXCHANGE, type);
+    }
 
     const hash = await app
       .get(PasswordService, { strict: false })
@@ -166,7 +182,7 @@ describe('notification-bridge (e2e)', () => {
       .deleteMany({ userId: { $in: ids } });
     await conn.collection('users').deleteMany({ _id: { $in: ids } });
     await conn.collection('notification_outbox').deleteMany({
-      correlationId: { $in: [...userIds, adminId] },
+      correlationId: { $in: [...userIds, adminId, ...orderIds] },
     });
     await probe.getChannel().purgeQueue(NOTIFICATIONS_QUEUE);
     await probe.close();
@@ -255,5 +271,134 @@ describe('notification-bridge (e2e)', () => {
       .toArray();
     expect(new Set(docs.map((d) => d.eventId)).size).toBe(2);
     expect(JSON.stringify(docs)).not.toContain('otro@test.co');
+  });
+
+  const register = (name: string, rol: 'PRODUCTOR' | 'PROVEEDOR') =>
+    call('post', '/auth/register', {
+      body: {
+        email: email(name),
+        password: PASSWORD,
+        nombre: `Usuario ${name}`,
+        documento: '1020304050',
+        rol,
+        aceptaTratamientoDatos: true,
+      },
+    });
+
+  it('registrar un PRODUCTOR y un PROVEEDOR publica user.registered sin email', async () => {
+    const productor = await register('prod-reg', 'PRODUCTOR');
+    expect(productor.status).toBe(201);
+    userIds.push(productor.body.id);
+
+    const msg = await messageFor(productor.body.id, 'user.registered');
+    expect(body(msg)).toMatchObject({
+      type: 'user.registered',
+      correlationId: productor.body.id,
+      payload: {
+        userId: productor.body.id,
+        rol: 'PRODUCTOR',
+        status: 'ACTIVE',
+      },
+    });
+    expect(msg.content.toString('utf8')).not.toContain(email('prod-reg'));
+
+    const proveedor = await register('prov-reg', 'PROVEEDOR');
+    userIds.push(proveedor.body.id);
+    const msg2 = await messageFor(proveedor.body.id, 'user.registered');
+    expect(body(msg2).payload).toMatchObject({
+      rol: 'PROVEEDOR',
+      status: 'PENDING_APPROVAL',
+    });
+  });
+
+  it('rechazar a un PROVEEDOR publica provider.rejected con el motivo y sin email', async () => {
+    const reg = await register('prov-rech', 'PROVEEDOR');
+    const id = reg.body.id as string;
+    userIds.push(id);
+    const res = await call('post', `/auth/users/${id}/reject`, {
+      token: adminToken,
+      body: { reason: 'Falta el RUT' },
+    });
+    expect(res.status).toBe(200);
+
+    const msg = await messageFor(id, 'provider.rejected');
+    expect(body(msg).payload).toEqual({
+      userId: id,
+      reviewedBy: adminId,
+      reason: 'Falta el RUT',
+    });
+    expect(msg.content.toString('utf8')).not.toContain(email('prov-rech'));
+  });
+
+  describe('eventos de order y payments (con sobre)', () => {
+    const hex = () => new Types.ObjectId().toString();
+
+    // Se llama al listener directo: emitir `order.*` en memoria activaría también a `catalog`.
+    const casos: [string, string, (o: string) => Json, string[]][] = [
+      [
+        'onOrderConfirmed',
+        'order.confirmed',
+        (o) => ({ orderId: o, buyerId: hex(), total: 5000, storeIds: [hex()] }),
+        ['buyerId', 'orderId', 'storeIds', 'total'],
+      ],
+      [
+        'onOrderCancelled',
+        'order.cancelled',
+        (o) => ({ orderId: o, buyerId: hex(), motivo: 'EXPIRED' }),
+        ['buyerId', 'motivo', 'orderId'],
+      ],
+      [
+        'onPaymentApproved',
+        'payment.approved',
+        (o) => ({ orderId: o, paymentId: hex(), buyerId: hex(), monto: 5000 }),
+        ['buyerId', 'monto', 'orderId', 'paymentId'],
+      ],
+      [
+        'onPaymentDeclined',
+        'payment.declined',
+        (o) => ({
+          orderId: o,
+          paymentId: hex(),
+          buyerId: hex(),
+          motivo: 'INSUFFICIENT_FUNDS',
+        }),
+        ['buyerId', 'orderId', 'paymentId'],
+      ],
+    ];
+
+    it.each(casos)(
+      '%s publica %s con el eventId original y solo los campos permitidos',
+      async (method, type, makePayload, campos) => {
+        const listener = app.get(BridgeEnvelopeListenerService, {
+          strict: false,
+        }) as unknown as Record<string, (e: Json) => Promise<void>>;
+        const orderId = hex();
+        orderIds.push(orderId);
+        const event = {
+          eventId: randomUUID(),
+          type,
+          occurredAt: new Date().toISOString(),
+          correlationId: orderId,
+          payload: makePayload(orderId),
+        };
+
+        await listener[method](event);
+        await listener[method](event); // reenvío del origen: no duplica
+
+        const msg = await messageFor(orderId, type);
+        expect(body(msg).eventId).toBe(event.eventId);
+        expect(Object.keys(body(msg).payload).sort()).toEqual(campos);
+        const doc = await until(async () => {
+          const d = await outboxByType(orderId, type);
+          return d?.status === 'PUBLISHED' ? d : undefined;
+        });
+        expect(doc.eventId).toBe(event.eventId);
+        expect(
+          await conn
+            .collection('notification_outbox')
+            .countDocuments({ eventId: event.eventId }),
+        ).toBe(1);
+      },
+    );
   });
 });

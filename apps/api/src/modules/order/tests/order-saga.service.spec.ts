@@ -7,6 +7,8 @@ import {
 const NOW = new Date('2026-11-08T12:00:00.000Z');
 const ORDER_ID = 'a1'.repeat(12);
 const BUYER = 'b1'.repeat(12);
+const STORE_A = 'c1'.repeat(12);
+const STORE_B = 'd1'.repeat(12);
 
 const evento = <T extends string>(type: T, eventId = 'e-1') => ({
   eventId,
@@ -33,6 +35,7 @@ describe('OrderSagaService (stock.reserved y stock.rejected)', () => {
   const orderModel = { findById: vi.fn(), updateOne: vi.fn() };
   const processedModel = { exists: vi.fn(), create: vi.fn() };
   const outbox = { add: vi.fn() };
+  const subOrderModel = { find: vi.fn() };
   let service: OrderSagaService;
 
   const pedido = (status: string) =>
@@ -54,11 +57,13 @@ describe('OrderSagaService (stock.reserved y stock.rejected)', () => {
     processedModel.create.mockResolvedValue([]);
     orderModel.updateOne.mockResolvedValue({ modifiedCount: 1 });
     outbox.add.mockResolvedValue('evento');
+    subOrderModel.find.mockReturnValue(chain([{ storeId: STORE_A }]));
     service = new OrderSagaService(
       connection as never,
       orderModel as never,
       processedModel as never,
       outbox as never,
+      subOrderModel as never,
     );
   });
 
@@ -167,7 +172,12 @@ describe('OrderSagaService (stock.reserved y stock.rejected)', () => {
   describe('payment.approved', () => {
     const aprobado = (eventId = 'e-1') => ({
       ...evento('payment.approved', eventId),
-      payload: { orderId: ORDER_ID, paymentId: 'p1', monto: 5000 },
+      payload: {
+        orderId: ORDER_ID,
+        paymentId: 'p1',
+        buyerId: BUYER,
+        monto: 5000,
+      },
     });
 
     it('pasa AWAITING_PAYMENT a CONFIRMED y escribe order.confirmed', async () => {
@@ -184,12 +194,42 @@ describe('OrderSagaService (stock.reserved y stock.rejected)', () => {
         expect.objectContaining({ id: 'sesion' }),
         'order.confirmed',
         ORDER_ID,
-        { orderId: ORDER_ID, buyerId: BUYER, total: 5000 },
+        { orderId: ORDER_ID, buyerId: BUYER, total: 5000, storeIds: [STORE_A] },
       );
       expect(processedModel.create).toHaveBeenCalledWith(
         [{ eventId: 'e-1', type: 'payment.approved' }],
         expect.anything(),
       );
+    });
+
+    it('guarda las tiendas del pedido sin repetidos', async () => {
+      pedido('AWAITING_PAYMENT');
+      subOrderModel.find.mockReturnValue(
+        chain([
+          { storeId: STORE_A },
+          { storeId: STORE_B },
+          { storeId: STORE_A },
+        ]),
+      );
+
+      await service.handlePaymentApproved(aprobado() as never);
+
+      expect(outbox.add).toHaveBeenCalledWith(
+        expect.anything(),
+        'order.confirmed',
+        ORDER_ID,
+        expect.objectContaining({ storeIds: [STORE_A, STORE_B] }),
+      );
+    });
+
+    it('un pedido sin sub-pedidos no se confirma (la transacción falla)', async () => {
+      pedido('AWAITING_PAYMENT');
+      subOrderModel.find.mockReturnValue(chain([]));
+
+      await expect(
+        service.handlePaymentApproved(aprobado() as never),
+      ).rejects.toThrow('sub-pedidos');
+      expect(outbox.add).not.toHaveBeenCalled();
     });
 
     it('confirma aunque expiresAt ya haya pasado: la condición no mira expiresAt', async () => {
@@ -247,7 +287,12 @@ describe('OrderSagaService (stock.reserved y stock.rejected)', () => {
 
       await service.handlePaymentDeclined({
         ...evento('payment.declined'),
-        payload: { orderId: ORDER_ID, paymentId: 'p1', motivo: 'FONDOS' },
+        payload: {
+          orderId: ORDER_ID,
+          paymentId: 'p1',
+          buyerId: BUYER,
+          motivo: 'FONDOS',
+        },
       } as never);
 
       expect(orderModel.updateOne).not.toHaveBeenCalled();

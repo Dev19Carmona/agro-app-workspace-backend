@@ -21,6 +21,8 @@ export type OrderConfirmedPayload = {
   orderId: string;
   buyerId: string;
   total: number;
+  /** Tiendas del pedido (ObjectId en hex, sin repetidos, al menos una). */
+  storeIds: string[];
 };
 export type OrderCancelledPayload = {
   orderId: string;
@@ -31,10 +33,12 @@ export type OrderCancelledPayload = {
 export type PaymentApprovedPayload = {
   orderId: string;
   paymentId: string;
+  buyerId: string;
   monto: number;
 };
 export type PaymentDeclinedPayload = {
   orderId: string;
   paymentId: string;
+  buyerId: string;
   motivo: string;
 };
