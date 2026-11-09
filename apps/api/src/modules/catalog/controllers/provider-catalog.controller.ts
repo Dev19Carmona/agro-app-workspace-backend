@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
@@ -17,7 +18,11 @@ import {
   type AuthenticatedUser,
   Role,
 } from '../../../../../../libs/common/src/security/roles.js';
-import { objectIdSchema } from '../dto/catalog-query.dto.js';
+import {
+  type MyProductsQuery,
+  myProductsQuerySchema,
+  objectIdSchema,
+} from '../dto/catalog-query.dto.js';
 import {
   type CreateProductDto,
   createProductSchema,
@@ -33,7 +38,9 @@ import {
   type UpdateVariantDto,
   updateVariantSchema,
 } from '../dto/variant.dto.js';
+import type { Page } from '../policies/pagination.policy.js';
 import {
+  type MyProductView,
   type ProductView,
   ProductsService,
   type VariantView,
@@ -124,5 +131,17 @@ export class ProviderCatalogController {
   @ApiOperation({ summary: 'Tienda del PROVEEDOR autenticado.' })
   myStore(@CurrentUser() user: AuthenticatedUser): Promise<StoreView> {
     return this.stores.getMine(user.id);
+  }
+
+  @Get('my-store/products')
+  @ApiOperation({
+    summary:
+      'Productos de la tienda propia (activos e inactivos) con sus variantes, stock y reservado.',
+  })
+  myProducts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query({ schema: myProductsQuerySchema }) query: MyProductsQuery,
+  ): Promise<Page<MyProductView>> {
+    return this.products.listMine(user.id, query);
   }
 }

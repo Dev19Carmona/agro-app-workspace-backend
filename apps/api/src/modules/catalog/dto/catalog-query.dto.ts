@@ -33,3 +33,7 @@ export const storesQuerySchema = z.strictObject({
   municipio: municipio.optional(),
 });
 export type StoresQuery = z.infer<typeof storesQuerySchema>;
+
+/** `GET /catalog/my-store/products`: solo paginación. */
+export const myProductsQuerySchema = z.strictObject({ ...paginacion });
+export type MyProductsQuery = z.infer<typeof myProductsQuerySchema>;

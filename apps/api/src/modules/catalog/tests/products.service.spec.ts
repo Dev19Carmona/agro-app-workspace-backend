@@ -51,6 +51,9 @@ describe('ProductsService', () => {
   const variantCreate = vi.fn();
   const variantFindById = vi.fn();
   const variantFindByIdAndUpdate = vi.fn();
+  const productFind = vi.fn();
+  const productCount = vi.fn();
+  const variantFind = vi.fn();
   let service: ProductsService;
 
   const dtoProducto = {
@@ -71,11 +74,14 @@ describe('ProductsService', () => {
         create: productCreate,
         exists: productExists,
         findOneAndUpdate: productFindOneAndUpdate,
+        find: productFind,
+        countDocuments: productCount,
       } as never,
       {
         create: variantCreate,
         findById: variantFindById,
         findByIdAndUpdate: variantFindByIdAndUpdate,
+        find: variantFind,
       } as never,
     );
   });
@@ -333,6 +339,48 @@ describe('ProductsService', () => {
         { new: true },
       );
       expect(view.precioVigente).toBe(900);
+    });
+  });
+
+  describe('listMine', () => {
+    const chain = (valor: unknown) => {
+      const c: Record<string, unknown> = {};
+      for (const m of ['sort', 'skip', 'limit']) c[m] = () => c;
+      c.lean = async () => valor;
+      return c;
+    };
+
+    it('lista productos de la tienda propia (inactivos incluidos) con variantes', async () => {
+      const activo = producto();
+      const inactivo = producto({ _id: oid(), activo: false });
+      productFind.mockReturnValue(chain([activo, inactivo]));
+      productCount.mockResolvedValue(2);
+      variantFind.mockReturnValue(
+        chain([
+          variante({ productId: activo._id, stock: 10, stockReservado: 3 }),
+          variante({ _id: oid(), productId: activo._id, activo: false }),
+        ]),
+      );
+
+      const page = await service.listMine(OWNER, { page: 1, limit: 20 });
+
+      expect(productFind).toHaveBeenCalledWith({ storeId: STORE_ID });
+      expect(page.total).toBe(2);
+      expect(page.data[0].variantes).toHaveLength(2);
+      expect(page.data[0].variantes[0]).toMatchObject({
+        stock: 10,
+        stockReservado: 3,
+        disponible: 7,
+      });
+      expect(page.data[1]).toMatchObject({ activo: false, variantes: [] });
+    });
+
+    it('responde 404 si el proveedor aún no tiene tienda', async () => {
+      storeFindOne.mockReturnValue(lean(null));
+
+      await expect(
+        service.listMine(OWNER, { page: 1, limit: 20 }),
+      ).rejects.toThrow('Aún no tienes una tienda');
     });
   });
 });

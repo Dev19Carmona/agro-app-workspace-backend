@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { type Model, type Types } from 'mongoose';
+import type { MyProductsQuery } from '../dto/catalog-query.dto.js';
 import type { CreateProductDto, UpdateProductDto } from '../dto/product.dto.js';
 import type { CreateVariantDto, UpdateVariantDto } from '../dto/variant.dto.js';
+import { type Page, toPage } from '../policies/pagination.policy.js';
 import { disponible, precioVigente } from '../policies/pricing.policy.js';
 import { Category, type CategoryDocument } from '../schemas/category.schema.js';
 import {
@@ -61,6 +63,8 @@ type StoredVariant = Pick<
   | 'stockReservado'
   | 'activo'
 > & { _id: Types.ObjectId; productId: Types.ObjectId };
+
+export type MyProductView = ProductView & { variantes: VariantView[] };
 
 export const toProductView = (p: StoredProduct): ProductView => ({
   id: p._id.toString(),
@@ -185,6 +189,41 @@ export class ProductsService {
       .lean();
     if (!updated) throw this.variantNotFound();
     return toVariantView(updated);
+  }
+
+  /**
+   * Productos de la tienda propia, activos o no, con todas sus variantes
+   * (stock y reservado incluidos). Sin tienda, 404 como `GET /catalog/my-store`.
+   */
+  async listMine(
+    ownerId: string,
+    query: MyProductsQuery,
+  ): Promise<Page<MyProductView>> {
+    const store = await this.storeModel.findOne({ ownerId }).lean();
+    if (!store) throw new NotFoundException('Aún no tienes una tienda');
+    const filter = { storeId: store._id };
+    const [products, total] = await Promise.all([
+      this.productModel
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .lean(),
+      this.productModel.countDocuments(filter),
+    ]);
+    const variants = products.length
+      ? await this.variantModel
+          .find({ productId: { $in: products.map((p) => p._id) } })
+          .sort({ _id: 1 })
+          .lean()
+      : [];
+    const data = products.map((p) => ({
+      ...toProductView(p),
+      variantes: variants
+        .filter((v) => v.productId.equals(p._id))
+        .map(toVariantView),
+    }));
+    return toPage(data, total, query.page, query.limit);
   }
 
   /** Tienda del PROVEEDOR por `ownerId`; sin tienda, 403. */

@@ -35,6 +35,7 @@ describe('ProviderCatalogController (HTTP con pipe y RolesGuard reales)', () => 
     updateProduct: vi.fn(),
     createVariant: vi.fn(),
     updateVariant: vi.fn(),
+    listMine: vi.fn(),
   };
   const stockService = { setStock: vi.fn() };
   const body = { nombre: 'Agro Sur', nit: '900123', municipio: 'Pasto' };
@@ -115,6 +116,34 @@ describe('ProviderCatalogController (HTTP con pipe y RolesGuard reales)', () => 
     it('responde 403 a un PRODUCTOR', async () => {
       const res = await http()
         .get('/catalog/my-store')
+        .set('x-test-rol', 'PRODUCTOR');
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe('GET /catalog/my-store/products', () => {
+    it('pasa user.id y la paginación por defecto al servicio', async () => {
+      products.listMine.mockResolvedValue({ data: [], total: 0 });
+
+      const res = await http().get('/catalog/my-store/products');
+
+      expect(res.status).toBe(200);
+      expect(products.listMine).toHaveBeenCalledWith(USER_ID, {
+        page: 1,
+        limit: 20,
+      });
+    });
+
+    it('rechaza parámetros desconocidos con 400', async () => {
+      const res = await http().get('/catalog/my-store/products?storeId=x');
+
+      expect(res.status).toBe(400);
+    });
+
+    it('responde 403 a un PRODUCTOR', async () => {
+      const res = await http()
+        .get('/catalog/my-store/products')
         .set('x-test-rol', 'PRODUCTOR');
 
       expect(res.status).toBe(403);
