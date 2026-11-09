@@ -9,6 +9,7 @@ import { SecurityModule } from '../../../libs/common/src/security/security.modul
 import { AuthModule } from './modules/auth/index.js';
 import { CatalogModule } from './modules/catalog/index.js';
 import { NotificationBridgeModule } from './modules/notification-bridge/index.js';
+import { NotificationInboxModule } from './modules/notification-inbox/index.js';
 import { OrderModule } from './modules/order/index.js';
 import { PaymentsModule } from './modules/payments/index.js';
 
@@ -35,6 +36,7 @@ import { PaymentsModule } from './modules/payments/index.js';
     OrderModule,
     PaymentsModule,
     NotificationBridgeModule,
+    NotificationInboxModule,
   ],
 })
 export class ApiModule {}

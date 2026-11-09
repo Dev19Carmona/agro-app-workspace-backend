@@ -3,18 +3,31 @@ import { validateApiEnv, validateEnv } from './env.schema.js';
 
 const URI = 'mongodb://localhost:27017/?replicaSet=rs0&directConnection=true';
 const AMQP = 'amqp://mini-croper:mini-croper-dev@localhost:5672';
+const TOKEN = 't'.repeat(32);
 
 describe('validateEnv', () => {
   it('acepta una MONGODB_URI válida', () => {
-    expect(validateEnv({ MONGODB_URI: URI, RABBITMQ_URI: AMQP })).toEqual({
+    expect(
+      validateEnv({
+        MONGODB_URI: URI,
+        RABBITMQ_URI: AMQP,
+        INTERNAL_SERVICE_TOKEN: TOKEN,
+      }),
+    ).toEqual({
       MONGODB_URI: URI,
       RABBITMQ_URI: AMQP,
+      INTERNAL_SERVICE_TOKEN: TOKEN,
     });
   });
 
   it('convierte PORT a número', () => {
     expect(
-      validateEnv({ MONGODB_URI: URI, RABBITMQ_URI: AMQP, PORT: '3000' }).PORT,
+      validateEnv({
+        MONGODB_URI: URI,
+        RABBITMQ_URI: AMQP,
+        INTERNAL_SERVICE_TOKEN: TOKEN,
+        PORT: '3000',
+      }).PORT,
     ).toBe(3000);
   });
 
@@ -24,31 +37,65 @@ describe('validateEnv', () => {
 
   it('rechaza una MONGODB_URI que no es una URL', () => {
     expect(() =>
-      validateEnv({ MONGODB_URI: 'no-es-una-url', RABBITMQ_URI: AMQP }),
+      validateEnv({
+        MONGODB_URI: 'no-es-una-url',
+        RABBITMQ_URI: AMQP,
+        INTERNAL_SERVICE_TOKEN: TOKEN,
+      }),
     ).toThrow(/MONGODB_URI/);
   });
 
   it('rechaza si falta RABBITMQ_URI y nombra la variable', () => {
-    expect(() => validateEnv({ MONGODB_URI: URI })).toThrow(/RABBITMQ_URI/);
+    expect(() =>
+      validateEnv({ MONGODB_URI: URI, INTERNAL_SERVICE_TOKEN: TOKEN }),
+    ).toThrow(/RABBITMQ_URI/);
   });
 
   it('rechaza una RABBITMQ_URI con esquema distinto de amqp(s)://', () => {
     expect(() =>
-      validateEnv({ MONGODB_URI: URI, RABBITMQ_URI: 'http://localhost:5672' }),
+      validateEnv({
+        MONGODB_URI: URI,
+        RABBITMQ_URI: 'http://localhost:5672',
+        INTERNAL_SERVICE_TOKEN: TOKEN,
+      }),
     ).toThrow(/RABBITMQ_URI/);
   });
 
   it('acepta una RABBITMQ_URI amqps://', () => {
     expect(
-      validateEnv({ MONGODB_URI: URI, RABBITMQ_URI: 'amqps://host:5671' })
-        .RABBITMQ_URI,
+      validateEnv({
+        MONGODB_URI: URI,
+        RABBITMQ_URI: 'amqps://host:5671',
+        INTERNAL_SERVICE_TOKEN: TOKEN,
+      }).RABBITMQ_URI,
     ).toBe('amqps://host:5671');
   });
 
   it('rechaza un PORT que no es número y nombra la variable', () => {
     expect(() =>
-      validateEnv({ MONGODB_URI: URI, RABBITMQ_URI: AMQP, PORT: 'abc' }),
+      validateEnv({
+        MONGODB_URI: URI,
+        RABBITMQ_URI: AMQP,
+        INTERNAL_SERVICE_TOKEN: TOKEN,
+        PORT: 'abc',
+      }),
     ).toThrow(/PORT/);
+  });
+
+  it('rechaza si falta INTERNAL_SERVICE_TOKEN y nombra la variable', () => {
+    expect(() => validateEnv({ MONGODB_URI: URI, RABBITMQ_URI: AMQP })).toThrow(
+      /INTERNAL_SERVICE_TOKEN/,
+    );
+  });
+
+  it('rechaza un INTERNAL_SERVICE_TOKEN de menos de 32 caracteres', () => {
+    expect(() =>
+      validateEnv({
+        MONGODB_URI: URI,
+        RABBITMQ_URI: AMQP,
+        INTERNAL_SERVICE_TOKEN: 't'.repeat(31),
+      }),
+    ).toThrow(/INTERNAL_SERVICE_TOKEN/);
   });
 });
 
@@ -70,6 +117,7 @@ describe('validateApiEnv', () => {
     JWT_PRIVATE_KEY: privateKey,
     JWT_PUBLIC_KEY: publicKey,
     PAYMENTS_WEBHOOK_SECRET: SECRET,
+    INTERNAL_SERVICE_TOKEN: TOKEN,
   };
 
   it('acepta un par PEM válido', () => {
@@ -91,9 +139,8 @@ describe('validateApiEnv', () => {
   it('rechaza si falta JWT_PRIVATE_KEY y nombra la variable', () => {
     expect(() =>
       validateApiEnv({
-        MONGODB_URI: URI,
-        RABBITMQ_URI: AMQP,
-        JWT_PUBLIC_KEY: publicKey,
+        ...base,
+        JWT_PRIVATE_KEY: undefined,
       }),
     ).toThrow(/JWT_PRIVATE_KEY/);
   });
@@ -101,9 +148,8 @@ describe('validateApiEnv', () => {
   it('rechaza si falta JWT_PUBLIC_KEY y nombra la variable', () => {
     expect(() =>
       validateApiEnv({
-        MONGODB_URI: URI,
-        RABBITMQ_URI: AMQP,
-        JWT_PRIVATE_KEY: privateKey,
+        ...base,
+        JWT_PUBLIC_KEY: undefined,
       }),
     ).toThrow(/JWT_PUBLIC_KEY/);
   });
@@ -154,5 +200,31 @@ describe('validateApiEnv', () => {
     });
     expect(env.CORS_ORIGINS).toBe('http://localhost:5173');
     expect(env.NODE_ENV).toBe('production');
+  });
+
+  it('rechaza si falta INTERNAL_SERVICE_TOKEN en api y nombra la variable', () => {
+    const { INTERNAL_SERVICE_TOKEN: _omitido, ...sinToken } = base;
+    expect(() => validateApiEnv(sinToken)).toThrow(/INTERNAL_SERVICE_TOKEN/);
+  });
+
+  it('NOTIFICATIONS_INTERNAL_URL ausente usa http://localhost:3005', () => {
+    expect(validateApiEnv(base).NOTIFICATIONS_INTERNAL_URL).toBe(
+      'http://localhost:3005',
+    );
+  });
+
+  it('acepta una NOTIFICATIONS_INTERNAL_URL válida', () => {
+    expect(
+      validateApiEnv({
+        ...base,
+        NOTIFICATIONS_INTERNAL_URL: 'http://notifications:3005',
+      }).NOTIFICATIONS_INTERNAL_URL,
+    ).toBe('http://notifications:3005');
+  });
+
+  it('rechaza una NOTIFICATIONS_INTERNAL_URL inválida y nombra la variable', () => {
+    expect(() =>
+      validateApiEnv({ ...base, NOTIFICATIONS_INTERNAL_URL: 'no-es-url' }),
+    ).toThrow(/NOTIFICATIONS_INTERNAL_URL/);
   });
 });

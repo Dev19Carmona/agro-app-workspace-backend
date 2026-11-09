@@ -6,6 +6,8 @@ export const envSchema = z.object({
   MONGODB_URI: z.url(),
   RABBITMQ_URI: z.string().regex(/^amqps?:\/\//),
   PORT: z.coerce.number().int().positive().optional(),
+  /** Secreto compartido entre `api` y `notifications` para la API interna. */
+  INTERNAL_SERVICE_TOKEN: z.string().min(32),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -53,6 +55,8 @@ export const apiEnvSchema = envSchema.extend({
   JWT_PUBLIC_KEY: rsaPem('public'),
   PAYMENTS_WEBHOOK_SECRET: z.string().min(32),
   CORS_ORIGINS: z.string().optional(),
+  /** URL base interna del servicio `notifications` (lectura de avisos). */
+  NOTIFICATIONS_INTERNAL_URL: z.url().default('http://localhost:3005'),
   NODE_ENV: z.string().optional(),
 });
 

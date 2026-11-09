@@ -25,6 +25,28 @@ describe('notifications (schema)', () => {
     });
   });
 
+  it('tiene el índice del listado por cursor', () => {
+    expect(indices.map(([campos]) => campos)).toContainEqual({
+      destinatarioTipo: 1,
+      destinatarioId: 1,
+      _id: -1,
+    });
+  });
+
+  it('tiene el índice de no leídos', () => {
+    expect(indices.map(([campos]) => campos)).toContainEqual({
+      destinatarioTipo: 1,
+      destinatarioId: 1,
+      readAt: 1,
+    });
+  });
+
+  it('readAt es opcional y un aviso nuevo nace sin leer', () => {
+    expect(NotificationSchema.path('readAt').instance).toBe('Date');
+    expect(NotificationSchema.path('readAt').isRequired).toBeFalsy();
+    expect(new NotificationModel({}).readAt).toBeUndefined();
+  });
+
   it('destinatarioId es un ObjectId, no Mixed', () => {
     expect(NotificationSchema.path('destinatarioId').instance).toBe('ObjectId');
     const doc = new NotificationModel({

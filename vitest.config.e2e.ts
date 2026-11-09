@@ -6,6 +6,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['apps/**/*.e2e-spec.ts'],
+    setupFiles: ['./vitest.setup.e2e.ts'],
     // Las suites comparten MongoDB, el outbox del puente y las colas de RabbitMQ: en paralelo
     // el publicador de una suite publicaría los eventos de otra.
     fileParallelism: false,
