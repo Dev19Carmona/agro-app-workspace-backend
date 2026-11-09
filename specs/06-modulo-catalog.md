@@ -28,6 +28,7 @@ Decisiones no obvias que este spec cierra:
   - `PATCH /catalog/variants/:id/stock`.
 - **Endpoints `ADMIN`** (`@Roles(Role.ADMIN)`), solo categorías y tiendas:
   - `POST /catalog/categories` y `PATCH /catalog/categories/:id`.
+  - `GET /catalog/admin/categories` (lista completa, desactivadas incluidas).
   - `GET /catalog/admin/stores`, `GET /catalog/admin/stores/:id` y `PATCH /catalog/admin/stores/:id`.
   - `POST /catalog/admin/stores/:id/deactivate`.
 - **Una sola tienda por PROVEEDOR**, garantizada con índice único en `stores.ownerId`.
@@ -178,6 +179,7 @@ Todos los DTO son `z.strictObject`. Los ids de ruta se validan como ObjectId de 
 | `PATCH /catalog/variants/:id` | PROVEEDOR | `presentacion`, `unidad`, `precio`, `precioOferta` (número o `null` para quitarla), `activo`. No toca `stock` ni `stockReservado`. |
 | `PATCH /catalog/variants/:id/stock` | PROVEEDOR | Body `{ stock }` (valor absoluto). Si `stock < stockReservado`: `409`. La comparación va en la propia actualización condicional. |
 | `POST /catalog/categories`, `PATCH /catalog/categories/:id` | ADMIN | `nombre` y `activa`. Nombre repetido: `409`. |
+| `GET /catalog/admin/categories` | ADMIN | `[{ id, nombre, activa }]`, todas (activas y no), ordenadas por nombre. Sin paginar. |
 | `GET /catalog/admin/stores`, `GET /catalog/admin/stores/:id` | ADMIN | Incluyen tiendas desactivadas. Paginado. |
 | `PATCH /catalog/admin/stores/:id` | ADMIN | Solo `nombre`, `nit` y `municipio`. |
 | `POST /catalog/admin/stores/:id/deactivate` | ADMIN | `activa = false`. Idempotente. |

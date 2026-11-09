@@ -12,11 +12,36 @@ const categoria = (extra: Record<string, unknown> = {}) => ({
 describe('CategoriesService', () => {
   const create = vi.fn();
   const findByIdAndUpdate = vi.fn();
+  const find = vi.fn();
   let service: CategoriesService;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    service = new CategoriesService({ create, findByIdAndUpdate } as never);
+    service = new CategoriesService({
+      create,
+      findByIdAndUpdate,
+      find,
+    } as never);
+  });
+
+  describe('listAdmin', () => {
+    it('lista todas las categorías, desactivadas incluidas, por nombre', async () => {
+      const activa = categoria();
+      const inactiva = categoria({ nombre: 'Abonos', activa: false });
+      const sort = vi.fn().mockReturnValue({
+        lean: async () => [inactiva, activa],
+      });
+      find.mockReturnValue({ sort });
+
+      const views = await service.listAdmin();
+
+      expect(find).toHaveBeenCalledWith();
+      expect(sort).toHaveBeenCalledWith({ nombre: 1 });
+      expect(views).toEqual([
+        { id: inactiva._id.toString(), nombre: 'Abonos', activa: false },
+        { id: activa._id.toString(), nombre: 'Semillas', activa: true },
+      ]);
+    });
   });
 
   describe('create', () => {

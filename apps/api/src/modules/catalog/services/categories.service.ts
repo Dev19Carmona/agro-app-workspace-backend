@@ -45,6 +45,15 @@ export class CategoriesService {
     }
   }
 
+  /** Lista todas las categorías, desactivadas incluidas, ordenadas por nombre. */
+  async listAdmin(): Promise<CategoryView[]> {
+    const categories = await this.categoryModel
+      .find()
+      .sort({ nombre: 1 })
+      .lean();
+    return categories.map(toCategoryView);
+  }
+
   /** Cambia `nombre` y/o `activa`. 404 si no existe, 409 si el nombre ya está en uso. */
   async update(id: string, dto: UpdateCategoryDto): Promise<CategoryView> {
     let updated;
